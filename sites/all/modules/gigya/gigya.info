@@ -1,0 +1,15 @@
+; $Id
+name = Gigya Socialize
+description = "Allows sites to utilize the Gigya Socialize API for authentication and social network updates."
+core = 6.x
+php = 5.2
+
+
+
+
+; Information added by drupal.org packaging script on 2010-05-21
+version = "6.x-2.2"
+core = "6.x"
+project = "gigya"
+datestamp = "1274411708"
+

@@ -1,0 +1,23 @@
+body {
+	background-image: none;
+}
+
+.subhead {  // like h3, but CMS can't handle setting headers ? tinyMCE issue maybe
+	font-weight: bold;
+	font-size: 115%;
+	color: #e68e1a;
+	margin-bottom: 12px;
+}
+
+.subhead2 { // like h4
+	height: 20px;
+	padding-top: 20px;
+	font-weight: bold;
+}
+
+.emphasizedparagraph {
+	font-size: 110%;
+	font-weight: bold;
+	padding-bottom: 15px;
+	color: red;
+}

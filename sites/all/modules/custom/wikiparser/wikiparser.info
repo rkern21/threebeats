@@ -1,0 +1,6 @@
+; $Id
+name = Wikiparser
+description = Module that provide Basic functionality for system.
+
+package = ThreeBeats
+core = 6.x

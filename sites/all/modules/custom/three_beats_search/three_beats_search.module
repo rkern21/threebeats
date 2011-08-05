@@ -1,0 +1,134 @@
+<?php
+
+/**
+ * Implementation of hook_init().
+ * @see http://api.drupal.org/hook_init
+ */
+function three_beats_search_init() {
+
+  module_load_include('inc', 'three_beats_search', 'includes/views');
+}
+
+/**
+ * Implementation of hook_menu().
+ * @see http://api.drupal.org/hook_menu
+ */
+function three_beats_search_menu() {
+  $items = array();
+
+  $items['search/beats/%'] = array(
+    'title' => 'Search results',
+    'page callback' => 'three_beats_search_search_page',
+    'page arguments' => array(2),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+	$items['celeb_autocomplete']=array(
+    'title'=>t('Celebrity autocomplete'),
+    'page callback' => 'celebrity_autocomplete',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implementation of hook_theme().
+ * @see http://api.drupal.org/hook_theme
+ * @return array Associative array of theme functions
+ */
+function three_beats_search_theme() {
+  return array(
+		'three_beats_search_search_page' => array(
+			'arguments' => array('users' => NULL, 'celebrityes' => NULL, 'right_block' => NULL),
+			'template'  => 'three-beats-search-search-page',
+			'path'      => drupal_get_path('module', 'three_beats_search') .'/theme'
+			),
+	);
+}
+
+function three_beats_search_search_page($keys){
+  $users_results =  views_get_view_result('search_view','block_2',$keys);
+	$celebrityes_results = views_get_view_result('search_view','block_1',$keys);
+	if (count($celebrityes_results)==1 && !count($users_results)){
+		drupal_goto('node/'. $celebrityes_results[0]->nid);
+	}
+	if (count($users_results)==1 && !count($celebrityes_results)){
+		drupal_goto('user/'. $users_results[0]->users_uid);
+	}
+
+	$users = views_embed_view('search_view','block_2',$keys);
+	$celebrityes = views_embed_view('search_view','block_1',$keys);
+	$right_block = views_embed_view('vote','block_1',$tid);
+
+	return theme('three_beats_search_search_page', $users, $celebrityes, $right_block);
+}
+
+function search_celebrity(&$form_state, $action = '', $keys = '', $type = NULL, $prompt = NULL){
+	 // Add CSS
+ // $type = 'node';
+  drupal_add_css(drupal_get_path('module', '') .'/search.css', 'module', 'all', FALSE);
+
+  if (!$action) {
+    $action = url('search/'. $type);
+  }
+
+  $form['inline'] = array('#prefix' => '<div class="container-inline">', '#suffix' => '</div>');
+  $form = array(
+    '#action' => $action,
+    '#attributes' => array('class' => 'search-form'),
+  );
+  $form['module'] = array('#type' => 'value', '#value' => $type);
+  $form['basic'] = array('#type' => 'item', '#title' => $prompt);
+  $form['basic']['inline'] = array('#prefix' => '<div class="container-inline">', '#suffix' => '</div>');
+  $form['inline']['keys'] = array(
+    '#type' => 'textfield',
+    '#default_value' => $keys? $keys : 'Type a Celebrity\'s Name' ,
+    '#size' => $prompt ? 40 : 20,
+    '#autocomplete_path' => 'celeb_autocomplete',
+    '#maxlength' => 255,
+  );
+  // processed_keys is used to coordinate keyword passing between other forms
+  // that hook into the basic search form.
+  $form['basic']['inline']['processed_keys'] = array('#type' => 'value', '#value' => array());
+  $form['inline']['submit'] = array('#type' => 'submit', '#value' => t(''));
+  $form['#submit'][] = 'search_celebrity_form_submit';
+  return $form;
+
+}
+
+function search_celebrity_form_submit($form, &$form_state) {
+  // The search form relies on control of the redirect destination for its
+  // functionality, so we override any static destination set in the request,
+  // for example by drupal_access_denied() or drupal_not_found()
+  // (see http://drupal.org/node/292565).
+  if (isset($_REQUEST['destination'])) {
+    unset($_REQUEST['destination']);
+  }
+  if (isset($_REQUEST['edit']['destination'])) {
+    unset($_REQUEST['edit']['destination']);
+  }
+
+  $form_id = $form['form_id']['#value'];
+  $form_state['redirect'] = 'search/beats/'. $form_state['values']['keys'];
+}
+
+function celebrity_autocomplete($string=''){
+  if($string){
+    $users = views_get_view_result('search_view','block_2',$string);
+    $celebrityes = views_get_view_result('search_view','block_1',$string);
+  }
+  $matches = array();
+  if($users){
+    foreach($users as $users_item){
+      $matches[$users_item->node_data_field_first_name_field_first_name_value . ' ' . $users_item->node_data_field_first_name_field_last_name_value] =check_plain($users_item->node_data_field_first_name_field_first_name_value . ' ' . $users_item->node_data_field_first_name_field_last_name_value);
+    }
+  }
+  if($celebrityes){
+    foreach($celebrityes as $celebrity){
+      $matches[$celebrity->node_data_field_firstname_field_firstname_value . ' ' . $celebrity->node_data_field_firstname_field_lastname_value] =check_plain($celebrity->node_data_field_firstname_field_firstname_value . ' ' . $celebrity->node_data_field_firstname_field_lastname_value);
+    }
+  }
+  drupal_json($matches);
+}

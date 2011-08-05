@@ -1,0 +1,1617 @@
+<?php
+
+module_load_include('inc','views', 'includes/base');
+module_load_include('inc','views', 'includes/handlers');
+
+class views_join_complex extends views_join {
+	// PHP 4 doesn't call constructors of the base class automatically from a
+	// constructor of a derived class. It is your responsibility to propagate
+	// the call to constructors upstream where appropriate.
+	function construct($table, $left_table, $left_field, $field, $extra = array(), $type = 'LEFT') {
+		parent::construct($table, $left_table, $left_field, $field, $extra, $type);
+	}
+
+	function join($table, &$query) {
+		if (empty($this->definition['table formula'])) {
+			$right_table = "{" . $this->table . "}";
+		}
+		else {
+			$right_table = $this->definition['table formula'];
+		}
+
+		if ($this->left_table) {
+			$left = $query->get_table_info($this->left_table);
+			$left_field = "$left[alias].$this->left_field";
+		}
+		else {
+			// This can be used if left_field is a formula or something. It should be used only *very* rarely.
+			$left_field = $this->left_field;
+		}
+
+		$output = " $this->type JOIN $right_table $table[alias] ON $this->left_field = $this->field";
+		// Tack on the extra.
+		if (isset($this->extra)) {
+			if (is_array($this->extra)) {
+				$extras = array();
+				foreach ($this->extra as $info) {
+					$extra = '';
+					// Figure out the table name. Remember, only use aliases provided
+					// if at all possible.
+					$join_table = '';
+					if (!array_key_exists('table', $info)) {
+						$join_table = $table['alias'] . '.';
+					}
+					elseif (isset($info['table'])) {
+						$join_table = $info['table'] . '.';
+					}
+
+					// And now deal with the value and the operator.  Set $q to
+					// a single-quote for non-numeric values and the
+					// empty-string for numeric values, then wrap all values in $q.
+					$raw_value = $this->db_safe($info['value']);
+					$q = (empty($info['numeric']) ? "'" : '');
+
+					if (is_array($raw_value)) {
+						$operator = !empty($info['operator']) ? $info['operator'] : 'IN';
+						// Transform from IN() notation to = notation if just one value.
+						if (count($raw_value) == 1) {
+							$value = $q . array_shift($raw_value) . $q;
+							$operator = $operator == 'NOT IN' ? '!=' : '=';
+						}
+						else {
+							$value = "($q" . implode("$q, $q", $raw_value) . "$q)";
+						}
+					}
+					else {
+						$operator = !empty($info['operator']) ? $info['operator'] : '=';
+						$value = "$q$raw_value$q";
+					}
+					$extras[] = "$join_table$info[field] $operator $value";
+				}
+
+				if ($extras) {
+					if (count($extras) == 1) {
+						$output .= ' AND ' . array_shift($extras);
+					}
+					else {
+						$output .= ' AND (' . implode(' ' . $this->extra_type . ' ', $extras) . ')';
+					}
+				}
+			}
+			else if ($this->extra && is_string($this->extra)) {
+				$output .= " AND ($this->extra)";
+			}
+		}
+		return $output;
+	}
+}
+
+/**
+ * Implementation of hook_init().
+ * @see http://api.drupal.org/hook_init
+ */
+function three_beats_init() {
+	module_load_include('inc', 'three_beats', 'includes/views');
+	drupal_add_js(drupal_get_path('module', 'three_beats') . '/js/three_beats.js');
+	drupal_add_js(drupal_get_path('module', 'three_beats') . '/js/md5.js');
+	drupal_add_js(drupal_get_path('module', 'three_beats') . '/scripts/autocomplete.js');
+	define('COLOR_VIOLET',     0);
+	define('COLOR_GREEN',    -82);
+	define('COLOR_GRAY',    -164);
+	define('COLOR_LIME',    -246);
+	define('COLOR_BROVN',   -328);
+	define('TWITTER_USER', 76);
+
+
+	if(((strpos($_SERVER['HTTP_HOST'], 'api.') === 0) && (arg(0) != 'json')) || ((strpos($_SERVER['HTTP_HOST'], 'api.') !== 0) && (arg(0) == 'json'))){
+		drupal_access_denied();
+		die;
+	}
+	if(arg(0) == 'admin' || arg(0) == 'batch') {
+		$GLOBALS['conf']['theme_default'] = 'garland';
+	}
+}
+
+
+/**
+ * Implementation of hook_form_alter().
+ * @see http://api.drupal.org/hook_form_alter
+ */
+function three_beats_form_alter(&$form, &$form_state, $form_id) {
+
+	global $user;
+	switch ($form_id){
+		case 'celeb_import_node_form':
+			$form['buttons']['submit']['#submit'][0]='three_beats_import_submit';
+			$form['menu']['#prefix'] =  '<div style="display:none">';
+			$form['menu']['#suffix'] =  '</div>';
+			$form['revision_information']['#prefix'] =  '<div style="display:none">';
+			$form['revision_information']['#suffix'] =  '</div>';
+			$form['comment_settings']['#prefix'] =  '<div style="display:none">';
+			$form['comment_settings']['#suffix'] =  '</div>';
+			$form['path']['#prefix'] =  '<div style="display:none">';
+			$form['path']['#suffix'] =  '</div>';
+			$form['author']['#prefix'] =  '<div style="display:none">';
+			$form['author']['#suffix'] =  '</div>';
+			$form['options']['#prefix'] =  '<div style="display:none">';
+			$form['options']['#suffix'] =  '</div>';
+			break;
+
+		case 'article_node_form':
+			$form['menu']['#prefix'] =  '<div style="display:none">';
+			$form['menu']['#suffix'] =  '</div>';
+			$form['revision_information']['#prefix'] =  '<div style="display:none">';
+			$form['revision_information']['#suffix'] =  '</div>';
+			$form['comment_settings']['#prefix'] =  '<div style="display:none">';
+			$form['comment_settings']['#suffix'] =  '</div>';
+			$form['path']['#prefix'] =  '<div style="display:none">';
+			$form['path']['#suffix'] =  '</div>';
+			$form['author']['#prefix'] =  '<div style="display:none">';
+			$form['author']['#suffix'] =  '</div>';
+			$form['options']['#prefix'] =  '<div style="display:none">';
+			$form['options']['#suffix'] =  '</div>';
+			break;
+		case 'celebrity_node_form':
+			$form['menu']['#prefix'] =  '<div style="display:none">';
+			$form['menu']['#suffix'] =  '</div>';
+			$form['revision_information']['#prefix'] =  '<div style="display:none">';
+			$form['revision_information']['#suffix'] =  '</div>';
+			$form['comment_settings']['#prefix'] =  '<div style="display:none">';
+			$form['comment_settings']['#suffix'] =  '</div>';
+			$form['path']['#prefix'] =  '<div style="display:none">';
+			$form['path']['#suffix'] =  '</div>';
+			$form['author']['#prefix'] =  '<div style="display:none">';
+			$form['author']['#suffix'] =  '</div>';
+			$form['options']['#prefix'] =  '<div style="display:none">';
+			$form['options']['#suffix'] =  '</div>';
+			if(arg(0) == 'create_celebrity'){
+				$form['#theme'] = 'beats_celebrity_node_form';
+				unset($form ['title'] );
+				unset($form ['taxonomy'] );
+				unset($form ['field_birthday'] );
+				unset($form ['field_organization'] );
+				unset($form ['field_alias'] );
+				unset($form ['field_celeb_picture'] );
+				unset($form ['field_celebrity_url'] );
+				unset($form ['field_more_about_links'] );
+				unset($form ['field_related_celebrities'] );
+				unset($form ['field_homepage'] );
+				unset($form ['field_rss'] );
+				unset($form ['field_wiki_pic'] );
+				unset($form ['field_wiki_description'] );
+				unset($form ['buttons']['preview'] );
+                                unset($form ['attachments']);
+                                unset($form ['field_since_id']);
+
+			}
+
+			break;
+
+		case 'taxonomy_form_term':
+			if($form['vid']['#value'] == 1){
+
+				$form['identification']['category_color'] = array(
+							 '#title' => t('Category color'),
+							 '#type' => 'textfield',
+							 '#size' => '20',
+							 '#default_value' => variable_get('category_color_'.$form['#term']['tid'],'')
+				);
+				$form['identification']['category_class'] = array(
+               '#title' => t('Category class'),
+               '#type' => 'textfield',
+               '#size' => '40',
+               '#default_value' => variable_get('category_class_'.$form['#term']['tid'],'')
+				);
+				$form['#submit'][] = 'three_beats_save_category_color';
+
+			}
+			break;
+	}
+}
+
+/**
+ * Implementation of hook_theme_registry_alter().
+ *
+ * Make javascript_aggregator's page preprocess function run *after* everything else's (even jQuery Update).
+ */
+function three_beats_theme_registry_alter(&$theme_registry) {
+	if (isset($theme_registry['imagecache'])) {
+
+		$theme_registry['imagecache']['preprocess functions'][] = 'beats_preprocess_imagecache';
+		$theme_registry['imagecache']['function'] = 'beats_imagecache';
+		$theme_registry['imagecache']['theme path'] = drupal_get_path('theme', '3beats') . '/template.php';
+	}
+}
+
+/**
+ * Save categories color , class
+ */
+function three_beats_save_category_color(&$form, &$form_state){
+	variable_set('category_color_'.$form['#term']['tid'],$form['identification']['category_color']['#post']['category_color']);
+	variable_set('category_class_'.$form['#term']['tid'],$form['identification']['category_class']['#post']['category_class']);
+}
+
+function present_celebrity ( $firstname, $lastname, $cel_url ){
+	//$get_view=views_get_view_result('celebrity', 'block_7', $firstname, $lastname);
+	$result = db_result(db_query("SELECT n.nid FROM node n
+		  			INNER JOIN
+		  				content_type_celebrity ctc
+		  			ON
+		  				ctc.nid = n.nid
+		  			WHERE
+		  				n.type = 'celebrity'
+		  			AND
+		  				ctc.field_firstname_value LIKE '%%%s%%'
+		  			AND
+		  				ctc.field_lastname_value LIKE '%%%s%%'
+		  			AND
+		  				ctc.field_celebrity_url_value LIKE '%%%s%%'
+		  			",$firstname, $lastname, $cel_url));
+	if($result) {
+		return $result;
+	}else{
+		return FALSE;
+	}
+
+}
+
+function three_beats_create_celebrity($array){
+	global $user;
+	if (!$array['firstname']&&!$array['lastname']){
+		$names=explode('-', $array['first_last']);
+		$array['firstname']=$names[0];
+		$array['lastname']=$names[1];
+	}
+
+
+	$celebrityNid = 0;
+	$celebrityNid = present_celebrity($array['firstname'],$array['lastname'], $array['cel_url']);
+
+	if (!$celebrityNid && ($array['firstname']) && ($array['lastname']) && ($array['cel_url']) ) {
+
+		$celebrity = new stdClass();
+		$celebrity->type = THREEBEATS_SITE_CELEBRITY;
+		$celebrity->status = 1;
+		$celebrity->title = $array['firstname'].' '.$array['lastname'];
+		$celebrity->field_descriptions[0]['value']=$array['description'];
+		$celebrity->field_celebrity_url[0]['value']=$array['cel_url'];
+		$celebrity->field_homepage[0]['title']=$array['home_url'];
+		$celebrity->field_homepage[0]['url']=$array['home_url'];
+
+		$celebrity->field_firstname[0]['value']=$array['firstname'];
+		$celebrity->field_lastname[0]['value']=$array['lastname'];
+
+		$celebrity->field_wiki_pic[0]['title']=$array['picture'];
+		$celebrity->field_wiki_pic[0]['url']=$array['picture'];
+		$celebrity->field_alias[0]['value']=$array['alias'];
+		$celebrity->field_organization[0]['value']=$array['organization'];
+
+		$celebrity->name=$user->name;
+
+		// Create the node.
+		$celebrity= node_submit($celebrity);
+		node_save($celebrity);
+
+		$term= taxonomy_get_term_by_name($array['category']);
+
+		taxonomy_node_save($celebrity,$term);
+		return $celebrity;
+	}else{
+		drupal_set_message(t('!name celebrity with !url already exists', array('!name' => l($array['firstname'].''.$array['lastname'], 'node/' .$celebrityNid), '!url' => url($array['cel_url']))));
+	}
+
+}
+
+function three_beats_import_submit(&$form, &$form_state){
+	$file=$form_state['values']['field_file'][0]['filepath'];
+	$content_file=file($file);
+	array_shift ($content_file);
+	foreach ($content_file as $id=>$str){
+
+		$cont_str=$str;
+		$cont_str=explode('||',$cont_str);
+
+		$obj = array();
+		$obj['cel_url']= $cont_str[0];
+		$obj['home_url']= $cont_str[5];
+		$obj['firstname']= $cont_str[1];
+		$obj['lastname']= $cont_str[2];
+		$obj['first_last']= $cont_str[3];
+		$obj['picture']=$cont_str[7];
+		$obj['alias']=$cont_str[4];
+		$obj['organization']=$cont_str[8];
+		$obj['description']=$cont_str[6];
+		$obj['category']=$cont_str[9];
+
+		three_beats_create_celebrity($obj);
+
+	}
+
+	drupal_goto('admin/content/node');
+
+}
+
+/**
+ * Implementation of hook_menu().
+ * @see http://api.drupal.org/hook_menu
+ */
+function three_beats_menu() {
+	$items = array();
+
+	$items['chart/get-rating-chart'] = array(
+    'title' => 'Api Chart',
+    'page callback' => 'three_beats_get_rating_chart',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+	);
+	$items['home'] = array(
+		'title' => 'Crowd Pulse',
+		'page callback' => 'three_beats_get_live_updates',
+		'access callback' => TRUE,
+		'type' => MENU_NORMAL_ITEM,
+	);
+
+	$items['vote_ajax_load'] = array(
+    'title' => 'cross',
+    'page callback' => 'three_beats_vote_ajax_load',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+	);
+
+	$items['admin/login'] = array(
+  	'title' => 'Log in',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('user_login'),
+    'access callback' => 'user_is_anonymous',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+	);
+
+	$items['create_celebrity']=array(
+    'title'=>t('Add celebrity'),
+    'page callback' => 'three_beats_site_add_celebrity',
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+	);
+
+	$items['admin/site_settings']=array(
+    'title'=>t('Settings'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('three_beats_site_form_settings'),
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+	);
+
+	$items['facebook_posting/%']=array(
+    'page callback' => 'facebook_posting',
+    'page arguments' => array(1),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+	);
+
+
+	$items['get_search_result']=array(
+    'title'=>t('Get search results'),
+    'page callback' => 'get_search_result',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+	);
+
+	return $items;
+}
+
+function three_beats_site_form_settings(&$form_state, $type=NULL) {
+	$form_state['type'] = $type;
+
+	$form['vote_time'] = array(
+    '#type' => 'textfield',
+    '#title' => t("Allow re-voting by"),
+    '#default_value' => variable_get('vote_time',''),
+    '#description' => t('Time after which the user may vote again (in hours)'),
+    '#weight' => 0,
+	);
+
+	$form['user_ranking_time'] = array(
+    '#type' => 'textfield',
+    '#title' => t("Celebrity ranking page"),
+    '#default_value' => variable_get('user_ranking_time',''),
+    '#description' => t('Time for user celebrity ranking page (in days)'),
+    '#weight' => 0,
+	);
+
+	$form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+    '#weight' => 10,
+	);
+	$form['#submit'][] = 'three_beats_site_save_vote_time';
+	return $form;
+}
+
+function three_beats_site_save_vote_time(&$form, &$form_state){
+	variable_set('vote_time',$form_state['clicked_button']['#post']['vote_time']);
+	variable_set('user_ranking_time',$form_state['clicked_button']['#post']['user_ranking_time']);
+}
+
+function three_beats_views_query_alter(&$view, &$query) {
+	if ($view->name == 'celebrity' && $view->current_display == 'block_2') {
+		$vote_time=variable_get('vote_time','');
+		if ($vote_time){
+			$query->where[0]['args'][1]='***CURRENT_TIME***-'.$vote_time*60*60;
+		}
+	}
+	if ($view->name == 'celebrity_ext' && $view->current_display == 'block_1') {
+	     //dpm($query->where);
+	     //$query->where[0]['args'][1]= time() - 8600;
+		//$query->groupby[0] = 'node_data_field_vote_comment';
+			
+	}
+
+
+}
+
+function three_beats_views_pre_execute(&$view) {
+
+	if ($view->name == 'celebrity' && $view->current_display == 'block_3') {
+		$queryExplode = explode('ORDER BY', $view->build_info['query']);
+		$view->build_info['query'] = $queryExplode[0] .' GROUP BY node_data_field_vote_comment_field_vote_comment_value ORDER BY ' . $queryExplode[1];
+		$view->build_info['count_query'] = $view->build_info['count_query']. ' GROUP BY node_data_field_vote_comment.field_vote_comment_value LIMIT 15';
+	}
+		
+	if ($view->name == 'vote' && $view->current_display == 'block_1') {
+		$queryExplode = explode('ORDER BY', $view->build_info['query']);
+		$view->build_info['query'] = $queryExplode[0] .' GROUP BY node_data_field_vote_comment_field_vote_comment_value ORDER BY ' . $queryExplode[1];
+		$view->build_info['count_query'] = $view->build_info['count_query']. ' GROUP BY node_data_field_vote_comment.field_vote_comment_value LIMIT 30';
+	}
+}
+
+function three_beats_get_live_updates(){
+	$tid = (arg(0) == 'home' && is_numeric(arg(1))) ? arg(1) : 'all';
+	return  views_embed_view('vote','block_1',$tid);
+}
+
+/**
+ * ajax voting load
+ */
+function three_beats_vote_ajax_load(){
+
+	return '';
+}
+
+function three_beats_get_rating_chart() {
+	global $user;
+	if (empty($_POST['period']) || !in_array($_POST['period'], array('4m', '1m', '1w', '1d', '1h')) || empty($_POST['node'])) {
+		print drupal_json(array('Wrong request'));
+		exit();
+	}
+
+	$node = node_load($_POST['node']);
+	if (empty($node) || $node->type != THREEBEATS_SITE_CELEBRITY) {
+		print drupal_json(ERROR_400_BAD_REQUEST);
+		exit();
+	}
+
+        $rating_chart = _beats_get_rating_chart(_beats_get_rating_data($node, $_POST['period']), NULL, '442x229', $node->nid);
+
+	print drupal_json(array('rating_chart' => $rating_chart));
+	exit();
+}
+
+
+/**
+ * Implementation of hook_theme().
+ * @see http://api.drupal.org/hook_theme
+ * @return array Associative array of theme functions
+ */
+function three_beats_theme() {
+
+	return array(
+		'crowd_pulse_menu' => array(
+			'template'  => 'crowd-pulse-menu',
+			'path'      => drupal_get_path('module', 'three_beats') .'/theme'
+			),
+	  'beats_celebrity_node_form' => array(
+  		'arguments' => array('form' => NULL),
+ 	    'template'  => 'celebrity_node_form',
+  		'path'      => drupal_get_path('module', 'three_beats') .'/forms'
+  		),
+
+
+  		);
+}
+
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function three_beats_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+	global $user;
+	switch ($op) {
+		case 'view':
+
+			if ($node->field_wiki_pic[0]['url']){
+
+				$node->field_celeb_picture[0]['filepath']=$node->field_wiki_pic[0]['url'];
+
+			}
+			break;
+
+		case 'insert' :
+		case 'update' :
+
+			if($node->type=='vote')
+			{
+				global $user;
+				$account_profile = content_profile_load('personal',$user->uid);
+				// if user have facebook_post flag post vote to facebook
+				if($account_profile->field_facebook_posting[0]['value']){
+					fb_stream_publish_dialog(array(	  	'user_message'=>$node->field_vote_comment[0]['value'],
+													'attachment',
+													'action_links',
+													'target_id',
+													'user_message_prompt',
+													'auto_publish'=>1,
+													'actor_id'));
+
+				}
+			}
+			break;
+
+	}
+
+	if($op == 'update' && $node->type == 'celebrity') {
+		$oldNode = node_load($node->nid);
+		if($node->field_wiki_pic[0]['url'] != $oldNode->field_wiki_pic[0]['url']) {
+			if(!empty($oldNode->field_wiki_pic[0]['url'])) {
+				// Make base path
+				$base_path = file_directory_path() . '/celebrity_cached_images/'. $node->nid;
+				// Get image info
+				$path = pathinfo($oldNode->field_wiki_pic[0]['url']);
+				// Get Image Name
+				$image_name = three_beats_get_name_base($oldNode->title);
+				// Create image file name
+				$image_path = $base_path.'/'.$image_name . '.' . $path['extension'];
+		  file_delete($image_path);
+		  imagecache_image_flush($image_path);
+
+			}
+		}
+	}
+
+}
+
+
+/**
+ * Get data for voting/rating for node by period
+ * @param $node mixed
+ * @param $period string
+ * @return mixed
+ */
+function _beats_get_rating_data($node, $period = '4m') {
+	if (empty($period) || !in_array($period, array('4m', '1m', '1w', '1d', '2d', '1h'))) {
+		return array();
+	}
+
+	$sdate = NULL;
+	$node_created_format = NULL;
+	switch ($period) {
+		case '4m':
+			$sdate = 60 * 60 * 24 * 120;
+			$descr = 'month';
+			$descr_count = 15;
+			$node_created_format = '%Y-%m';
+			break;
+
+		case '1m':
+			$descr = 'day';
+			$descr_count = 15;
+			$sdate = 60 * 60 * 24 * 30;
+			$node_created_format = '%Y-%m-%d';
+			break;
+
+		case '1w':
+			$descr = 'day';
+			$descr_count = 15;
+			$sdate = 60 * 60 * 24 * 7;
+			$node_created_format = '%Y-%m-%d';
+			break;
+
+		case '1d':
+			$descr = 'hour';
+			$descr_count = 48;
+			$sdate = 60 * 60 * 24 * 1;
+			$node_created_format = '%Y-%m-%d %h';
+			break;
+			 
+		case '2d':
+			$descr = 'hour';
+			$descr_count = 48;
+			$sdate = 60 * 60 * 24 * 2;
+			$node_created_format = '%Y-%m-%d %h';
+			break;
+
+		case '1h':
+			$descr = 'minute';
+			$descr_count = 60;
+			$sdate = 60 * 60;
+			$node_created_format = '%Y-%m-%d %h:%i';
+			break;
+	}
+
+	$interval = $sdate;
+	$sdate = time() - $sdate;
+
+	global $user, $active_db;
+
+	$query = "SELECT node.nid AS nid,
+				node_data_field_celebrity.field_celebrity_nid AS celebrity_nid,
+				node_data_field_vote_rate.field_vote_rate_target AS vote_rate_target,
+				FROM_UNIXTIME(node.created, '" . $node_created_format . "') AS vote_created,
+				node.created AS vote_created_timestamp,
+				node.vid AS node_vid,
+				ROUND(SUM(node_data_field_vote_rate.field_vote_rate_rating / 25), 1) AS vote_rate_rating_sum,
+				COUNT(*) AS vote_rate_rating_count
+            FROM node node
+				LEFT JOIN content_field_celebrity node_data_field_celebrity ON node.vid = node_data_field_celebrity.vid
+				LEFT JOIN content_type_vote node_data_field_vote_rate ON node.vid = node_data_field_vote_rate.vid
+            WHERE (node.status <> 0) AND (node.type in ('vote'))
+				AND (node_data_field_celebrity.field_celebrity_nid = " . (int) $node->nid . ")
+				AND node.created > '".$sdate."'
+			GROUP BY vote_created
+			ORDER BY node.created ASC;";
+
+	$query2 = db_query("SELECT node.nid AS nid,
+				node_data_field_celebrity.field_celebrity_nid AS celebrity_nid,
+				node_data_field_vote_rate.field_vote_rate_target AS vote_rate_target,
+				FROM_UNIXTIME(node.created, '" . $node_created_format . "') AS vote_created,
+				node.created AS vote_created_timestamp,
+				node.vid AS node_vid,
+				ROUND(SUM(node_data_field_vote_rate.field_vote_rate_rating / 25), 1) AS vote_rate_rating_sum,
+				COUNT(*) AS vote_rate_rating_count
+            FROM node node
+				LEFT JOIN content_field_celebrity node_data_field_celebrity ON node.vid = node_data_field_celebrity.vid
+				LEFT JOIN content_type_vote node_data_field_vote_rate ON node.vid = node_data_field_vote_rate.vid
+            WHERE (node.status <> 0) AND (node.type in ('vote'))
+				AND (node_data_field_celebrity.field_celebrity_nid = " . (int) $node->nid . ")
+				AND node.created < '".$sdate."'
+            ;");
+
+	$data = new stdClass();
+	$data->period = $period;
+	$data->rating = array();
+	$result = mysql_query($query, $active_db);
+	$result2=db_fetch_object($query2);
+	$result2->vote_created_timestamp = $sdate;
+	$result2->vote_created = date(str_replace('%', '', $node_created_format), $sdate);
+	$temp_sum = ($result2->vote_rate_rating_sum - $result2->vote_rate_rating_count * 2);
+	$result2->vote_rate_rating_sum = $temp_sum;
+	$data->rating[] = $result2;
+
+	while ($row = mysql_fetch_object($result)) {
+		$row->vote_rate_rating_sum = $temp_sum = $temp_sum + $row->vote_rate_rating_sum - $row->vote_rate_rating_count*2;
+		$data->rating[] = $row;
+	}
+	if (count($data->rating) == 1) {
+		$data->rating = array_merge($data->rating, $data->rating);
+	}
+
+	// most of the time this is > 0 (else)
+	if (count($data->rating) == 0) {
+		$data->rating = array();
+		$rating = new stdClass();
+		$rating->nid = NULL;
+		$rating->celebrity_nid = 1;
+		$rating->vote_rate_target = 0;
+		$rating->vote_created = date(str_replace('%', '', $node_created_format), $sdate);
+		$rating->vote_created_timestamp = $sdate;
+		$rating->node_vid = NULL;
+		$rating->vote_rate_rating_sum = $temp_sum;
+		$rating->vote_rate_rating_count = 0;
+		$data->rating[] = $rating;
+
+		$rating = new stdClass();
+		$rating->nid = NULL;
+		$rating->celebrity_nid = 1;
+		$rating->vote_rate_target = 0;
+		$rating->vote_created = date(str_replace('%', '', $node_created_format), time());
+		$rating->vote_created_timestamp = time();
+		$rating->node_vid = NULL;
+		$rating->vote_rate_rating_sum = $temp_sum;
+		$rating->vote_rate_rating_count = 0;
+		$data->rating[] = $rating;
+	} else {
+		for($i = $descr_count-1; $i >= 0; $i--){
+
+			$elem=0;
+
+			if ($period){
+				$descr_per=str_replace('%','', date($node_created_format , strtotime('-' . $i . ' ' . $descr, time())));
+				$date_timestamp=strtotime('-' . $i . ' ' . $descr, time());
+			}
+			foreach ($data->rating as $id=>$item){
+				if ($descr_per==$item->vote_created){
+					$elem=1;
+				}
+			}
+			if ($elem==0){
+				$rating = new stdClass();
+				$rating->nid = NULL;
+				$rating->celebrity_nid = $data->rating[0]->celebrity_nid;
+				$rating->vote_rate_target = 0;
+				$rating->vote_created = $descr_per;
+				$rating->vote_created_timestamp =  $date_timestamp;
+				$rating->node_vid = NULL;
+				$rating->vote_rate_rating_sum = 0;
+				$data->rating[] = $rating;
+			}
+
+			usort($data->rating,"sort_by_date");
+
+			foreach ($data->rating as $id => $item) {
+				if ($item->vote_rate_rating_sum  == 0){
+					$data->rating[$id]->nid = $data->rating[$id  - 1]->nid;
+					$data->rating[$id]->node_vid = $data->rating[$id  - 1]->node_vid;
+					$data->rating[$id]->vote_rate_rating_sum = $data->rating[$id  - 1]->vote_rate_rating_sum;
+				}
+			}
+			if ($period == '1h'){
+				$i-=2;
+			}
+		}
+	}
+	return $data;
+}
+
+function sort_by_date($f1,$f2){
+	if($f1->vote_created_timestamp < $f2->vote_created_timestamp) return -1;
+	elseif($f1->vote_created_timestamp > $f2->vote_created_timestamp) return 1;
+	else return 0;
+}
+
+/**
+ * Create Google Chart
+ * @param $data mixed
+ * @return string
+ */
+function _beats_get_rating_chart($data, $url = NULL, $chart_size = '442x229', $nid) {
+	if (empty($data) || !is_array($data->rating)) {
+		return NULL;
+	}
+
+	$size = explode('x', $chart_size);
+
+	$chart = array(
+    '#chart_id' => '3beats-rating-chart',
+    '#type' => CHART_TYPE_LINE,
+    '#size' => chart_size($size[0], $size[1]),
+    '#chart_fill' => chart_fill('bg', '000000'),
+    '#grid_lines' => chart_grid_lines(10, 10, 1, 1), // this should be dynamic
+    '#adjust_resolution' => TRUE,
+
+	);
+
+	$vote_created_label_format = NULL;
+	switch ($data->period) {
+		case '4m':
+			$vote_created_label_format = 'M Y';
+			break;
+		case '1m':
+			$vote_created_label_format = 'M d';
+			break;
+		case '1w':
+			$vote_created_label_format = 'M d';
+			break;
+		case '1d':
+			$vote_created_label_format = 'h:i a';
+			break;
+		case '1h':
+			$vote_created_label_format = 'h:i a';
+			break;
+	}
+
+	$ratings = array();
+
+	foreach ($data->rating as $id=>$value) {
+
+		$value->vote_rate_rating_sum = number_format($value->vote_rate_rating_sum, 1, '.', '');
+		$ratings[] = $value->vote_rate_rating_sum;
+
+		if (($id==0)||($data->rating[$id]!=$data->rating[$id-1])||($id==count($data->rating)-1)){
+			$chart['#shape_markers'][] = chart_shape_marker(0, -1, CHART_MARKER_CIRCLE, 5, '666633');
+			$chart['#shape_markers'][] = chart_shape_marker(0, -1, CHART_MARKER_CIRCLE, 3, 'FFEB08');
+		}
+		$vote_created[]=date($vote_created_label_format, $value->vote_created_timestamp);
+	}
+
+	$chart['#data_colors'][] = 'F43CFB';
+	$min = min($ratings);
+	$max = max($ratings);
+	$max = $min == $max ? $max + 1 : $max;
+
+	$a = 1;
+	foreach($ratings as $id => $item){
+		if (isset($ratings[$id]) && isset($ratings[$id-1])){
+			if ($ratings[$id] != $ratings[$id-1]){
+				$a = 0.1;
+			}
+		}
+	}
+	$errorstring = "Text: ";
+	foreach($ratings as $id => $item){
+		$errorstring += "$id=" + $id + " $item=" + $item + ".";
+
+		$ratings[$id] = ($item - $min) / ($max - $min) * 10;
+		$ratings[$id] = $ratings[$id] == 0 ? $a : $ratings[$id];
+	}
+	drupal_set_message($errorstring, 'warning');
+
+	$chart['#mixed_axis_labels'][CHART_AXIS_Y_LEFT][0][] = chart_mixed_axis_range_label($min, $max);
+	$chart['#data']['a'] = $ratings;
+
+	$chart['#mixed_axis_labels'][CHART_AXIS_X_BOTTOM][1][] = chart_mixed_axis_label($vote_created[0], 0);
+	if (count($vote_created)>2){
+		$chart['#mixed_axis_labels'][CHART_AXIS_X_BOTTOM][1][] = chart_mixed_axis_label($vote_created[(count($vote_created)-1)/2], 50);
+	}
+	$chart['#mixed_axis_labels'][CHART_AXIS_X_BOTTOM][1][] = chart_mixed_axis_label($vote_created[count($vote_created)-1], 100);
+	$chart['#mixed_axis_label_styles'][] = array(0, 'DFBE20', 9);
+	$chart['#mixed_axis_label_styles'][] = array(1, 'DFBE20', 9);
+
+	$ch = curl_init(CHART_URI);
+	curl_setopt($ch, CURLOPT_POST      ,1);
+	curl_setopt($ch, CURLOPT_POSTFIELDS    ,chart_build($chart));
+	curl_setopt($ch, CURLOPT_FOLLOWLOCATION  ,1);
+	curl_setopt($ch, CURLOPT_HEADER      ,0);  // DO NOT RETURN HTTP HEADERS
+	curl_setopt($ch, CURLOPT_RETURNTRANSFER  ,1);  // RETURN THE CONTENTS OF THE CALL
+	$Rec_Data = curl_exec($ch);
+
+	if($url){
+		return save_png($Rec_Data,$data->period, $chart_size, $nid);
+	}
+	return '<img src="'.save_png($Rec_Data,$data->period,NULL,$nid).'"/>';
+
+}
+
+
+function save_png($Rec_Data, $period, $chart_size = NULL, $nid){
+        if (is_numeric(arg(1))) {
+                $node=node_load(arg(1));
+                $image_name =t('graph_node_').arg(1).'_'.$period.'_'.$chart_size;
+        } else {
+                $node=node_load($nid);
+                $image_name =t('graph_node_').$nid.'_'.$period.'_'.$chart_size;
+        }
+	$base_path = file_directory_path() . '/external_files';
+	if (!file_exists($base_path)) {
+		mkdir($base_path, 0777);
+	}
+	$image_path = $base_path.'/'.$image_name . '.' . 'png';
+	// get cached data for url
+	$cached_image = cache_get($image_name);
+
+	//check if file alredy in cache and if cache has not expired
+	if ($cached_image->created + variable_get('cache_time_external_img', 1) < time()) {
+		// check mime
+		$file_pointer = $Rec_Data;
+		if (!$file_pointer) {
+			die("Could not open specified filename");
+		} else {
+			$file_headers = @stream_get_meta_data($file_pointer);
+		}
+
+		// download the image
+		$remote_image = $Rec_Data or die('Could not grab the file');
+		$local_image  = fopen($image_path, 'w+') or die('Could not create the file');
+		fputs($local_image, $remote_image) or die('Could not write to the file');
+		fclose($local_image);
+		unset($remote_image);
+		$return = $image_path;
+		// set downloaded time for image
+		cache_set($image_name, $image_name, 'cache');
+	} else {
+		$return = $image_path;
+	}
+	return $return;
+
+}
+
+function validate_vote($uid,$cid){
+	$view = views_get_view_result('celebrity', 'block_2', $uid, $cid);
+	if ( $uid > 0 && is_array($view) && count($view) < 1){
+		return TRUE;
+	}
+	else
+	{
+		return FALSE;
+	}
+
+}
+
+function validate_anony_vote($ip, $cid){
+	$view = views_get_view_result('celebrity_ext', 'block_1', $ip, $cid);
+	//print_r($view);die;
+	if (is_array($view) && count($view) < 1){
+		return TRUE;
+	}
+	else
+	{
+	  
+		return $view;
+	}
+
+}
+
+function validate_article($uid, $articleURL, $cid){
+	$view = views_get_view_result('article', 'block_1', $uid, $articleURL, 'all', $cid);
+	if ( $uid > 0 && is_array($view) && count($view) < 1){
+		return TRUE;
+	}
+	else
+	{
+		return FALSE;
+	}
+
+}
+
+/**
+ * Get count of celebrities bu vote id
+ * @param $voteId
+ * /home
+ */
+function get_count_celebrities_by_vote_id($celerityId){
+
+	$sql=db_fetch_object(db_query("	SELECT count(*) as cnt FROM `content_field_celebrity` as fc
+      									LEFT JOIN node as n on fc.nid = n.nid
+      									WHERE n.type='vote' AND fc.field_celebrity_nid = %d", $celerityId));
+
+	return $sql->cnt;
+}
+
+function three_beats_search($op = 'search', $keys = NULL, $skip_access_check = FALSE) {
+
+	$pager_step = 5;
+
+	switch ($op) {
+		case 'name':
+
+			return t('3Beats Search');
+
+		case 'search':
+			global $user;
+			$find = array();
+			// Replace wildcards with MySQL/PostgreSQL wildcards.
+			$keys = preg_replace('!\*+!', '%', $keys);
+			if ((substr_count($keys," "))!=0){
+				$key=explode(" ",$keys);
+			}
+			$result = pager_query("(SELECT * FROM content_type_celebrity INNER JOIN node node_celeb ON content_type_celebrity.nid =  node_celeb.nid  WHERE  (LOWER(content_type_celebrity.field_firstname_value) LIKE LOWER('%%%s%%'))OR (LOWER(content_type_celebrity.field_lastname_value) LIKE  LOWER('%%%s%%')))
+									ORDER BY type UNION ALL
+									(SELECT DISTINCT type, users.uid, content_type_personal.field_first_name_value, content_type_personal.field_last_name_value  FROM  (users
+									INNER JOIN node node_users ON users.uid = node_users.uid
+									INNER JOIN content_type_personal ON node_users.vid = content_type_personal.vid) WHERE (LOWER(content_type_personal.field_first_name_value) LIKE  LOWER('%%%s%%'))OR (LOWER(content_type_personal.field_last_name_value) LIKE  LOWER('%%%s%%')))"
+									, 5, 0, NULL, $key[0]?$key[0]:$keys, $key[1]?$key[1]:$keys, $key[0]?$key[0]:$keys, $key[1]?$key[1]:$keys);
+
+									while ( $result_all=db_fetch_object($result)) {
+
+										if ($node = node_load($result_all->nid)&&(!user_load($result_all->nid))) {
+											$term=array_shift(taxonomy_node_get_terms_by_vocabulary($node, 1));
+											if ($keys&&!$key[1]){
+												if(strlen($node->field_descriptions[0]['value'])>150 ){
+													$str = substr ($node->field_descriptions[0]['value']  , 0 , 150 ).'.'.'.'.'.' ;
+												}else{
+													$str =$node->field_descriptions[0]['value'] ;
+												}
+												$find[] = array('title' =>$result_all->field_firstname_value.' '.$result_all->field_lastname_value,
+        								                'link' =>url('node/'. $result_all->nid, array('absolute' => TRUE)),
+                                        'attributes'=>'celeb',
+                                        'picture' =>$node->field_wiki_pic[0]['url'] ,
+                                        'vote_rate'=>$node->field_vote_rate ,
+                                        'descriptions'=> $str ,
+                                        'tid'=>$term->tid,
+                                        'nid'=>$result_all->nid
+												);
+												$nids[]=$node->nid ;
+											}
+										}
+										else if ($us = user_load($result_all->nid)&&($result_all->field_firstname_value)){
+											$find[] = array('title' =>$result_all->field_firstname_value.' '.$result_all->field_lastname_value ,
+                    				  'descriptions' => $us->name .' ('. $us->mail .')',
+      							          'link' =>url('user/'. $us->uid, array('absolute' => TRUE)),
+      							          'picture'=>$us->picture,
+      							          'attributes'=>'user',
+										  'uid'=>$result_all->nid);
+										}
+									}
+
+									if (count($find)== 1 ){
+										if ($find[0]['attributes'] == 'celeb'){
+											drupal_goto('node/'.$find[0]['nid']);
+										}else {
+											drupal_goto('user/'.$find[0]['uid']);
+										}
+									}
+									global $nid_separated;
+									$nid_separated = implode(",", $nids);
+									return $find;
+	}
+}
+
+function three_beats_user_page() {
+	global $user;
+	if ($user->uid) {
+		menu_set_active_item('user/'. $user->uid);
+		return menu_execute_active_handler();
+	}
+	else {
+		return drupal_access_denied();
+	}
+}
+
+function three_beats_menu_alter(&$items) {
+	$items['search/user/%menu_tail']['access callback'] = FALSE;
+
+	$items['user/login']['access callback'] = FALSE;
+
+	$items['user/register']['access callback'] = FALSE;
+	$items['user']['page callback'] = 'three_beats_user_page';
+}
+
+function three_beats_site_add_celebrity($node = NULL, $term = NULL){
+        module_load_include('pages.inc', 'node');
+	return node_add('celebrity');
+}
+
+function three_beats_get_image($path, $image_path = NULL, $category = NULL, $node = array()){
+	$image = '';
+	if($image_path) { // For Others Image
+		if(empty($path)) {
+			$image =  FALSE;
+		}elseif(!valid_url($path, true)) {
+			$image =  file_directory_path() .'/defaults_img.png';
+		}
+		$image = three_beats_others_image($path, $image_path);
+	}else{ // For Celebrity Image
+		if(empty($path)) {
+			$image =  three_beats_celebrity_default_image($category);
+		}elseif(!valid_url($path, true)) {
+			$image =  three_beats_celebrity_default_image($category);
+		}
+		$image =  three_beats_celebrity_image($path, $category, $node);
+	}
+	return $image;
+}
+
+/*
+ * Provides image for the celebrity if exists and if not than download
+ *
+ * @param $category
+ * @return image path
+ */
+function three_beats_celebrity_image($filepath, $category = NULL, $node = array()) {
+	// Make base path
+	//p($node);die;
+	$base_path = file_directory_path() . '/celebrity_cached_images/'. $node->nid;
+	// Check of directory exists
+	three_beats_check_directory($base_path);
+	// Create unique filename
+	//$image_name = md5($filepath);
+	$path = pathinfo($filepath);
+	$image_name = three_beats_get_name_base($node->title);
+	// Create image file name
+	$image_path = $base_path.'/'.$image_name . '.' . $path['extension'];
+	// Check if image already exists
+	if(file_exists($image_path)) {
+		$path = $image_path;
+	}else{ // if not than download image
+		//p(basename($filepath));
+		//p(filepath);die;
+
+		// Retrieve the image from the URL
+		$result = drupal_http_request($filepath, array('User-Agent' => 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.8.1.15) Gecko/20080623 Firefox/2.0.0.15'));
+		if ($result->error) {
+			$path = three_beats_celebrity_default_image($category);
+		}elseif($result->code == 200){
+			if($file = file_save_data($result->data, $image_path, FILE_EXISTS_REPLACE)) {
+				$path = $image_path;
+			}else{
+				$path = three_beats_celebrity_default_image($category);
+			}
+	 }
+	}
+	return $path;
+}
+
+/*
+ * Provides image for the other than celebrity if exists and if not than download
+ *
+ * @param $category
+ * @return image path
+ */
+function three_beats_others_image($filepath, $image_path, $node = array()) {
+
+	// Make base path
+	$base_path = file_directory_path() . $image_path ;
+	// Check of directory exists
+	three_beats_check_directory($base_path);
+	// Create unique filename
+	$path = pathinfo($filepath);
+
+	$image_name = three_beats_get_name_base($path['filename']);
+	// Create image file name
+	$image_path = $base_path.'/'.$image_name. '.' . $path['extension'];
+	// Check if image already exists
+	if(file_exists($image_path)) {
+		$path = $image_path;
+	}else{ // if not than download image
+		// Retrieve the image from the URL
+		$result = drupal_http_request($filepath, array('User-Agent' => 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.8.1.15) Gecko/20080623 Firefox/2.0.0.15'));
+		if ($result->error) {
+			$path = file_directory_path() .'/defaults_img.png';
+		}elseif($result->code == 200){
+			if($file = file_save_data($result->data, $image_path, FILE_EXISTS_REPLACE)) {
+				$path = $image_path;
+			}else{
+				$path = file_directory_path() .'/defaults_img.png';
+			}
+	 }
+	}
+	return $path;
+}
+
+/*
+ * Provides default image for the celebrity
+ *
+ * @param $category
+ * @return image path
+ */
+function three_beats_celebrity_default_image($category = NULL) {
+	$avatarsPath = file_directory_path() . '/avatars';
+	switch($category) {
+		case "5 min. Fame":
+			$image = $avatarsPath.'/default_5mi.png';
+			break;
+		case "Sports":
+			$image = $avatarsPath.'/default_spo.png';
+			break;
+		case "Business":
+			$image = $avatarsPath.'/default_bus.png';
+			break;
+		case "Entertainment":
+			$image = $avatarsPath.'/default_ent.png';
+			break;
+		case "Politics":
+			$image = $avatarsPath.'/default_pol.png';
+			break;
+		default:
+			$image = $avatarsPath.'/default_ent.png';
+			break;
+
+	}
+	return $image;
+}
+/*
+ function three_beats_get_image($path, $image_path = NULL){
+ if(!$path) return FALSE;
+ $return = "";
+ // validate url
+ if(!valid_url($path, true)){
+ return (drupal_get_path( 'theme', '3beats' ) .'/images/defaults_img.png');
+ }
+ // create custom folder for external files
+ if($image_path){
+ $base_path = file_directory_path() . $image_path;
+ }else {
+ $base_path = file_directory_path() . '/celebrity_cached_images';
+ }
+ if (!file_exists($base_path)) {
+ mkdir($base_path, 0777);
+ }
+ $image_name = md5($path);
+ $image_path = $base_path.'/'.$image_name . '.' . 'jpg';
+ // get cached data for url
+ $cached_image = cache_get($image_name);
+ //check if file alredy in cache and if cache has not expired
+ if ($cached_image->created + variable_get('cache_time_external_img', 60*60*4) < time()) {
+ // check mime
+ $file_pointer = fopen($path, 'r');
+ if (!$file_pointer) {
+ } else {
+ $file_headers = stream_get_meta_data($file_pointer);
+ }
+ // loop headers and check mime type
+ $file_correct = false;
+ $mime_types = array('image/jpeg', 'image/jpg', 'image/png', 'image/gif');
+ if ($file_headers['wrapper_data']){
+ foreach ($file_headers['wrapper_data'] as $header_value) {
+ foreach($mime_types as $mime_type){
+ if (strpos(strtolower($header_value), $mime_type)) {
+ $file_correct = true;
+ }
+ }
+ }
+ }
+ if(!$file_correct){
+
+ }
+ imagecache_image_flush($image_path);
+ // download the image
+ $remote_image = file_get_contents($path);
+ $local_image  = fopen($image_path, 'w+');
+ fputs($local_image, $remote_image);
+ fclose($local_image);
+ unset($remote_image);
+ $return = $image_path;
+ // set downloaded time for image
+ cache_set($image_name, $image_name, 'cache', time() + variable_get('cache_time_external_img', 60*60*4));
+ } else {
+ $return = $image_path;
+ }
+ return $return;
+ }
+ */
+
+
+/**
+ * Implementation of hook_token_list().
+ */
+function three_beats_token_values($type, $object = NULL, $options = array()) {
+	$tokens = array();
+	if ($type == 'user') {
+		$mail = $object;
+		content_profile_load ('THREEBEATS_SITE_PERSONAL', $object->uid );
+		$tokens = array(
+      'firstname' => $user->field_first_name_value,
+      'lastname' => $user->field_last_name_value,
+		);
+	}
+	return $tokens;
+}
+
+
+/**
+ * Implementation of hook_token_values().
+ */
+function three_beats_token_list($type = 'all') {
+	if ($type == 'user' || $type == 'all') {
+		$tokens['user'] = array(
+      'firstname' => t('First name of user.'),
+      'lastname' => t('Last name of user.'),
+		);
+		return $tokens;
+	}
+}
+
+/**
+ * Implementation of hook_fb().  Here we customize the behavior of
+ * Drupal for Facebook.
+ *
+ * Prompts user for extended permission when they have authorized the
+ * application.
+ *
+ * Currently supporting only connect pages, not canvas pages.
+ */
+
+function three_beats_fb_user($op, $data, &$return) {
+	global $user;
+
+	if($user->uid && $op == FB_OP_POST_INIT && (!isset($user->field_first_name) || !$user->field_first_name[0]['value'] || !isset($user->field_last_name) || !$user->field_last_name[0]['value'])){
+
+		$account_profile = content_profile_load('personal', $user->uid);
+		$fb_app = isset($data['fb_app']) ? $data['fb_app'] : NULL;
+		$fb = isset($data['fb']) ? $data['fb'] : NULL;
+
+		$fbu = fb_facebook_user($fb);
+		if ($fb) {
+			$infos = $fb->api_client->users_getInfo(array($fbu),
+			array('first_name',
+														'last_name',
+														'pic',
+														'pic_big',
+														'email'
+														));
+
+														if (isset($infos[0]['first_name']) || isset($infos[0]['last_name'])){
+
+															$account_profile = content_profile_load('personal',$user->uid);
+
+															if(!$account_profile){
+																$account_profile 		= new stdClass;
+																$account_profile->status= 1;
+																$account_profile->title = $user->name." personal info";
+																$account_profile->type	= 'personal';
+																$account_profile->name 	= $user->name;
+																$account_profile->uid 	= $user->uid;
+															}
+
+															$account_profile->field_first_name[0]['value'] = $infos[0]['first_name'];
+															$account_profile->field_last_name[0]['value'] = $infos[0]['last_name'];
+															$account_profile->field_facebook_email[0]['value'] = $infos[0]['email'];
+
+															if (isset($infos[0]['pic'])){
+																$pic_file=file_get_contents($infos[0]['pic']);
+																$arr = parse_url ($infos[0]['pic']);
+																$pic_name = basename( $arr["path"] );
+																$pic_path = 'sites/default/files/pictures/'.$user->uid.'_'.$pic_name;
+																file_put_contents($pic_path,$pic_file);
+																$query = db_query("UPDATE `users` SET picture='".$pic_path."' WHERE uid=".$user->uid);
+															}
+
+															$account_profile = node_submit($account_profile);
+															node_save($account_profile);
+														}
+		}
+	}
+}
+
+function three_beats_site_word_wrap_wbr($text, $length){
+	/*
+	$text_array = explode(' ', $text);
+	foreach($text_array as $id => $item){
+		if(strlen($item) > $length){
+			$text_array[$id] = wordwrap($text_array[$id], $length, "<wbr/>", TRUE);
+		}
+	}
+	if( stristr($_SERVER['HTTP_USER_AGENT'], 'Opera') || stristr($_SERVER['HTTP_USER_AGENT'], 'msie') && (strlen($item) > $length)){
+		$text_array[$id] = wordwrap($text_array[$id], $length," ", TRUE);
+	} elseif (stristr($_SERVER['HTTP_USER_AGENT'], 'msie') && (strlen($item) > $length)){
+		$text_array[$id] = wordwrap($text_array[$id], $length," ", TRUE);
+	}
+	$restext = implode(' ', $text_array);
+	
+	return make_clickable($restext);
+	*/
+	return make_clickable($text);
+}
+
+/**
+ * ajax
+ * Get search results
+ */
+function get_search_result(){
+
+	$page = 1;
+	$keys = $_GET['keys'];
+	$page = $_GET['page'];
+	$type = $_GET['type'];
+
+	$pager_step = 5;
+	$current_offset = $page*$pager_step-$pager_step;
+
+	global $user;
+
+	// Replace wildcards with MySQL/PostgreSQL wildcards.
+	$keys = preg_replace('!\*+!', '%', $keys);
+	if ((substr_count($keys," "))!=0) {
+		$key=explode(" ",$keys);
+	}
+
+	if ($type=='celebrity') {
+		$result = db_query("SELECT *
+						   FROM content_type_celebrity
+						   INNER JOIN node node_celeb ON content_type_celebrity.nid =  node_celeb.nid
+						   WHERE  (LOWER(content_type_celebrity.field_firstname_value) LIKE LOWER('%%%s%%'))OR (LOWER(content_type_celebrity.field_lastname_value) LIKE  LOWER('%%%s%%'))
+						   LIMIT %d, %d",$key[0]?$key[0]:$keys, $key[1]?$key[1]:$keys, $current_offset, $pager_step);
+
+		while ( $result_all=db_fetch_object($result)){
+			$term=array_shift(taxonomy_node_get_terms_by_vocabulary($node, 1));
+			if ($keys&&!$key[1])
+			{
+				if(strlen($node->field_descriptions[0]['value'])>150 )
+				{
+					$str = substr ($node->field_descriptions[0]['value']  , 0 , 150 ).'.'.'.'.'.' ;
+				}
+				else
+				{
+					$str =$node->field_descriptions[0]['value'] ;
+				}
+				$find_result = array(  'title' =>$result_all->field_firstname_value.' '.$result_all->field_lastname_value,
+								  'link' =>url('node/'. $result_all->nid, array('absolute' => TRUE)),
+								  'attributes'=>'celeb',
+								  'picture' =>$node->field_wiki_pic[0]['url'] ,
+								  'vote_rate'=>$node->field_vote_rate ,
+								  'descriptions'=> $str ,
+								  'tid'=>$term->tid,
+								  'nid'=>$result_all->nid
+				);
+
+				$find .=theme('search_result',$find_result,'three_beats');
+				$nids[]=$node->nid ;
+			}
+		}
+	} else if ($type=='user') {
+		$result = db_query("SELECT DISTINCT type, users.uid, content_type_personal.field_first_name_value, content_type_personal.field_last_name_value
+							FROM  (users
+							INNER JOIN node node_users ON users.uid = node_users.uid
+							INNER JOIN content_type_personal ON node_users.vid = content_type_personal.vid)
+							WHERE (LOWER(content_type_personal.field_first_name_value) LIKE  LOWER('%%%s%%')) OR (LOWER(content_type_personal.field_last_name_value)
+							LIKE  LOWER('%%%s%%')) LIMIT %d, %d", $key[0]?$key[0]:$keys, $key[1]?$key[1]:$keys, $current_offset, $pager_step);
+
+		while ( $result_all=db_fetch_object($result))
+		{
+			$find_result = array(
+							  'title' =>$result_all->field_firstname_value.' '.$result_all->field_lastname_value ,
+							  'descriptions' => $us->name .' ('. $us->mail .')',
+							  'link' =>url('user/'. $us->uid, array('absolute' => TRUE)),
+							  'picture'=>$us->picture,
+							  'attributes'=>'user',
+							  'uid'=>$result_all->nid
+			);
+			$find .=theme('search_result',$find_result,'three_beats');
+		}
+	}
+
+
+	if (count($find)== 1 ){
+		if ($find[0]['attributes'] == 'celeb'){
+			drupal_goto('node/'.$find[0]['nid']);
+		}else {
+			drupal_goto('user/'.$find[0]['uid']);
+		}
+	}
+
+
+	global $nid_separated;
+	$nid_separated = implode(",", $nids);
+
+	print theme('search_results', $find,'three_beats');
+}
+
+function three_beats_substr_name($fistname, $lastname, $size){
+	$firstname = NULL;
+	$name = $fistname . ' ' . $lastname;
+	if (strlen($name) > $size ){
+		if (strlen($lastname) > $size){
+			return substr(($lastname), 0, $size);
+		}else{
+			return $lastname;
+		}
+	}else{
+		return $name;
+	}
+}
+
+/**
+ * activete or deactivate twitter posting
+ */
+function facebook_posting($facebook_postiong_value){
+	var_dump($facebook_postiong_value);
+	if ($facebook_postiong_value=="on")
+	{
+		global $user;
+		$account_profile = content_profile_load('personal',$user->uid);
+		$account_profile->field_facebook_posting[0]['value'] = 1;
+		node_save($account_profile);
+		echo json_encode(array("facebook posting on"));
+
+	}
+	elseif($facebook_postiong_value=="off")
+	{
+		global $user;
+		$account_profile = content_profile_load('personal',$user->uid);
+		$account_profile->field_facebook_posting[0]['value'] = 0;
+		node_save($account_profile);
+		echo json_encode(array("facebook posting off"));
+	}
+}
+
+function three_beats_user($op, &$edit, &$account, $category = NULL) {
+	if ($op == 'logout') {
+		setcookie('myCookie1', '', time()-3600, '/');
+		setcookie('myCookie2', '', time()-3600, '/');
+	}
+}
+
+
+function three_beats_file_exists($path) {
+	$path = str_replace('http://'.$_SERVER['SERVER_NAME'].'/','',$path);
+
+	if(file_exists($path)) {
+		return TRUE;
+	}
+	return FALSE;
+}
+
+
+function three_beats_get_name_base($val) {
+	/*
+	 white stripes == white_stripes
+	 dylan, bob    == dylan_bob
+	 dream police / 'surrender' == dream_police_surrender
+	 */
+	$base = preg_replace('/\W+/', '_', $val);
+	return trim($base, '_');
+}
+
+function three_beats_check_directory($path) {
+	if (is_dir($path)) {
+		return;
+	}
+	else {
+		$old_mask = umask(0);
+		$res = @mkdir($path, 0775);
+		if (!$res) {
+			three_beats_check_directory(dirname($path));
+			@mkdir($path, 0775);
+		}
+		umask($old_mask);
+	}
+}
+
+function three_beats_celebrity_relative_imagepath($node) {
+
+	$base_path = file_directory_path() . '/celebrity_cached_images/'. $node->nid;
+	// Get image info
+	$path = pathinfo($node->field_wiki_pic[0]['url']);
+	// Get Image Name
+	$image_name = three_beats_get_name_base($node->title);
+	// Create image file name
+	$image_path = 'http://'.$_SERVER['SERVER_NAME'].'/'.$base_path.'/'.$image_name . '.' . $path['extension'];
+	 
+	return $image_path;
+}
+
+function three_beats_celebrity_imagecache($preset = '189x245', $node) {
+	/*
+	 * Clelebrity Image
+	 */
+	if(is_array($node->taxonomy)) {
+		foreach($node->taxonomy as $termID => $termData) {
+			if($termData->vid == 1) {
+				$category = $termData->name;
+			}
+		}
+	}
+	$CelebImageUrl = three_beats_get_image($node->field_wiki_pic[0]['url'], NULL, $category, $node);
+	$CelebImageCachedUrl = imagecache_create_url($preset, $CelebImageUrl);
+	$extenstion = '';
+	$time = @filemtime(three_beats_celebrity_relative_imagepath($node));
+	if($time && $CelebImageCachedUrl) {
+		$extention = "?$time";
+	}
+	return $CelebImageCachedUrl.$extention;
+}
+
+function _make_url_clickable_cb($matches) {
+	$ret = '';
+	$url = $matches[2];
+ 
+	if ( empty($url) )
+		return $matches[0];
+	// removed trailing [.,;:] from URL
+	if ( in_array(substr($url, -1), array('.', ',', ';', ':')) === true ) {
+		$ret = substr($url, -1);
+		$url = substr($url, 0, strlen($url)-1);
+	}
+	return $matches[1] . "<a href=\"$url\" rel=\"nofollow\">$url</a>" . $ret;
+}
+ 
+function _make_web_ftp_clickable_cb($matches) {
+	$ret = '';
+	$dest = $matches[2];
+	$dest = 'http://' . $dest;
+ 
+	if ( empty($dest) )
+		return $matches[0];
+	// removed trailing [,;:] from URL
+	if ( in_array(substr($dest, -1), array('.', ',', ';', ':')) === true ) {
+		$ret = substr($dest, -1);
+		$dest = substr($dest, 0, strlen($dest)-1);
+	}
+	return $matches[1] . "<a href=\"$dest\" rel=\"nofollow\">$dest</a>" . $ret;
+}
+ 
+function _make_email_clickable_cb($matches) {
+	$email = $matches[2] . '@' . $matches[3];
+	return $matches[1] . "<a href=\"mailto:$email\">$email</a>";
+}
+ 
+function make_clickable($ret) {
+	$ret = ' ' . $ret;
+	// in testing, using arrays here was found to be faster
+	$ret = preg_replace_callback('#([\s>])([\w]+?://[\w\\x80-\\xff\#$%&~/.\-;:=,?@\[\]+]*)#is', '_make_url_clickable_cb', $ret);
+	$ret = preg_replace_callback('#([\s>])((www|ftp)\.[\w\\x80-\\xff\#$%&~/.\-;:=,?@\[\]+]*)#is', '_make_web_ftp_clickable_cb', $ret);
+	$ret = preg_replace_callback('#([\s>])([.0-9a-z_+-]+)@(([0-9a-z-]+\.)+[0-9a-z]{2,})#i', '_make_email_clickable_cb', $ret);
+ 
+	// this one is not in an array because we need it to run last, for cleanup of accidental links within links
+	$ret = preg_replace("#(<a( [^>]+?>|>))<a [^>]+?>([^>]+?)</a></a>#i", "$1$3</a>", $ret);
+	$ret = trim($ret);
+	return $ret;
+}

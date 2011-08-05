@@ -1,0 +1,147 @@
+<?php
+// $Id: activitystream_flickr.module,v 1.2.2.5 2009/04/14 21:04:05 akalsey Exp $
+/**
+ * @file
+ * The module for importing Flickr Images.
+ */
+
+include('phpFlickr.php');
+
+/*
+ * The API passes in a $user object that contains four properties:
+ * uid, userid, password, feed. These properties contain the account
+ * information entered into the user's settings page, along with the 
+ * uid of their Drupal account.
+ */
+function activitystream_flickr_streamapi($user) {
+  // This user doesn't have a Flickr ID entered
+  // into their settings. Move along. Nothing
+  // to see here.
+  if (!$user->userid) {
+    return;
+  }
+  $apikey = variable_get('activitystream_flickr_key', '');
+  if ($apikey == '') {
+    watchdog('activitystream', 'Flickr API Key is missing.', WATCHDOG_ERROR);
+    return;
+  }
+  $f = new phpFlickr($apikey, '');
+  // Cache to the filesystem in the temp directory set by Drupal
+  $f->enableCache ('fs', file_directory_temp());
+  if (!$person = $f->people_findByUsername($user->userid)) {
+    watchdog('activitystream', 'Unable to connect to Flickr: error code: '. $error_code .' '. $error_msg, WATCHDOG_ERROR);
+    return;
+  }
+  if (!$baseurl = $f->urls_getUserPhotos($person['id'])) {
+    watchdog('activitystream', 'Unable to connect to Flickr: error code: '. $error_code .' '. $error_msg, WATCHDOG_ERROR);
+    return;
+  }
+  if (!$photos = $f->people_getPublicPhotos($person['id'], NULL, NULL, 10)) {
+    watchdog('activitystream', 'Unable to get photos from Flickr: error code: '. $error_code .' '. $error_msg, WATCHDOG_ERROR);
+  }
+  if (!$favorites = $f->favorites_getPublicList($person['id'], NULL, NULL, NULL, 10)) {
+    watchdog('activitystream', 'Unable to get Faorites Flickr: error code: '. $error_code .' '. $error_msg, WATCHDOG_ERROR);
+  }
+  
+  $photoitems = activitystream_flickr_build_items($photos, 'photo', $f);
+  $favoriteitems = activitystream_flickr_build_items($favorites, 'favorite', $f);
+  $items = array_merge($photoitems, $favoriteitems);
+
+  return $items;
+}
+
+function activitystream_flickr_build_items($photos, $type = 'photo', &$f) {
+  $items = array();
+  if (!is_array($photos['photos']['photo'])) {
+    return $items;
+  }
+  foreach ($photos['photos']['photo'] as $photo) {
+    $info = $f->photos_getInfo($photo['id']);
+    $link = $baseurl . $photo['id'];
+    $activity['guid'] = $photo['id'];
+    $activity['title'] = $photo['title'];
+    $activity['link'] = $link;
+    $activity['body'] = '<img class="activitystream-flickr photo" alt="'. $photo['title'] .'" src="'. $f->buildPhotoURL($photo, "Square") .'" />';
+    $activity['timestamp'] = $info['dateuploaded'];
+    $activity['data'] = serialize(array('type' => $type));
+    $items[] = $activity;
+  }
+  return $items;
+}
+
+
+/*
+ * Implement an admin form hook. Modules should build a form
+ * using an array that mirrors the Drupal form API. activitystream.module
+ * will add the form elements to the admin settings page.
+ * To avoid collisions with other activitystream module's forms
+ * use your module's name as the form array's key.
+ */
+function activitystream_flickr_activitystream_admin() {
+  $form['activitystream_flickr'] = array(
+    '#type' => 'fieldset',
+    '#title' => t("Flickr API settings"),
+    '#weight' => 1,
+    '#collapsible' => FALSE,
+    '#collapsed' => FALSE
+  );
+  $form['activitystream_flickr']['activitystream_flickr_key'] = array(
+    '#type' => 'textfield',
+    '#title' => t("API Key"),
+    '#description' => t('Your Flickr API Key (<a href="http://www.flickr.com/services/api/keys/apply/">Get a key</a>)'),
+    '#default_value' => variable_get('activitystream_flickr_key', ''),
+    '#required' => FALSE
+  );
+  return $form;
+}
+
+/*
+ * Implement a user settings form hook. Modules should build a form
+ * using an array that mirrors the Drupal form API. activitystream.module
+ * will add the form elements to a tab called Activity Streams on the
+ * user's Profile Edit page. Fields should be named
+ * yourmodulename_fieldname. For instance, to store the user ID for 
+ * Flickr, the field name is activitystream_flickr_userid
+ *
+ * To avoid collisions with other activitystream module's forms
+ * use your module's name as the form array's key.
+ */
+function activitystream_flickr_activitystream_settings(&$edit) {
+  $form['activitystream_flickr'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Flickr settings'));
+  $form['activitystream_flickr']['activitystream_flickr_userid'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Username'),
+    '#default_value' => empty($edit['activitystream_flickr_userid']) ? '' : $edit['activitystream_flickr_userid'],
+    '#description' => t('The username for your Flickr account'));
+  return $form;  
+}
+
+/*
+ * Return an image used to identify the activity. Most themes expect this is a 16x16 image
+ * so you should stick with that. Return the full <img> tag for the image.
+ */
+function theme_activitystream_flickr_icon() {
+  return theme_image(drupal_get_path('module', 'activitystream_flickr') .'/flickr.png', 'Flickr');
+}
+
+function theme_activitystream_flickr_item($action) {
+  $node = node_load($action->nid);
+  $date = theme('activitystream_date', $node->created);
+  $user = user_load(array('uid' => $node->uid));
+  $name = theme('activitystream_username', $user);
+  return '<span class="activitystream-item">'. theme('activitystream_flickr_icon') ." <span>$name posted " . l($node->title, $action->link) ." <span class=\"activitystream-created\">$date</span></span> ". l('#', 'node/'. $node->nid, array('class' => 'permalink')) .'</span>';
+}
+
+
+function activitystream_flickr_theme() {
+  return array(
+    'activitystream_flickr_icon' => array(
+      'arguments' => array(),
+    ),
+    'activitystream_flickr_item' => array(
+      'arguments' => array('activity' => NULL),
+    ),
+  );
+}

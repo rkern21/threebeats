@@ -1,0 +1,6 @@
+; $Id
+name = Three beates rest
+description = Module that provide Basic functionality for system.
+
+package = ThreeBeats
+core = 6.x

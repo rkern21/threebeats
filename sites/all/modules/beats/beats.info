@@ -1,0 +1,7 @@
+; $Id$
+name = "3beats Custom Module"
+description = "Live updates for 3beats Custom Module"
+core = 6.x
+php = 5.1
+package = 3beats
+version = 1.1

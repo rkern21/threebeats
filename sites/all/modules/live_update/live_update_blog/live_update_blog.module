@@ -1,0 +1,89 @@
+<?php
+// $id$
+
+/**
+ * Implementation of hook_enable
+ **/
+function live_update_blog_enable() { 
+  // enable our menu_altering
+  menu_cache_clear_all();
+}
+
+/** 
+ * Implementation of hook_menu_alter
+ **/
+function live_update_blog_menu_alter(&$items) { 
+  // tell the menu system about our overrides
+  $items['blog']['page callback'] = 'live_update_blog_blog_page_last';
+  $items['blog/%user_uid_optional']['page callback'] = 'live_update_blog_blog_page_user';
+}
+
+/**
+ * Wrapper for blog_page_last() to add live_update js
+ **/
+function live_update_blog_blog_page_last() { 
+  // Load live_update js
+  $settings = array(
+    'target' => '.live-update-blog-page',
+    'method' => 'prepend',
+    'effect' => 'fade',
+  );
+
+  live_update_initialize('blog/all', $settings);
+
+  // Return normal blog page with target div wrapper
+  $output = '<div class="live-update-blog-page">';
+  $output .=  blog_page_last();
+  $output .= '</div>';
+
+  return $output;
+}
+
+/**
+ * Override blog_page_user() to add live_update js
+ **/
+function live_update_blog_blog_page_user($account) { 
+  $settings = array(
+    'target' => 'live-update-blog-user-page',
+    'method' => 'prepend',
+  );
+
+  live_update_initialize('blog/'.$account->uid, $settings);
+
+  // Return normal blog page
+  $output = '<div class="live-update-blog-user-page">';
+  $output .=  blog_page_user($account);
+  $output .= '</div>';
+
+  return $output;
+}
+
+/**
+ * On insert of a blog node, we tell live_update about our new content
+ **/
+function live_update_blog_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) { 
+  if ($node->type == 'blog' && $node->status) {  
+    switch ($op) { 
+      case 'insert': 
+        // Use default settings
+
+        $html = node_view(node_load(array('nid' => $node->nid)));
+        live_update_update_content('blog/all', $html); // Everyone's blog
+        live_update_update_content('blog/'.$node->uid, $html); // User's blog 
+        break;
+
+      case 'update': 
+        // Target existing node 
+        $settings = array(
+          'target' => '#node-'. $node->nid,
+          'method' => 'replaceWith', 
+        );
+
+        // Update content
+        $html = node_view(node_load(array('nid' => $node->nid)));
+        live_update_update_content('blog/all/', $html, $settings); // Everyone's blog
+        live_update_update_content('blog/'.$node->uid, $html, $settings); // User's blog 
+        break;
+    } 
+  }
+}

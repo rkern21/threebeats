@@ -1,0 +1,145 @@
+<?php
+//Ids
+
+/**
+ * Provides the module content type.
+ * @file
+ */
+
+/**
+ * Implements hook_perm()
+ */
+function beats_perm() {
+  return array('administer 3beats', 'access 3beats');
+}
+
+
+
+/**
+ * Implementation of hook_menu
+ */
+function beats_menu()
+{
+	$items = array();
+	$items['home'] = array(
+			'title' => 'Crowd Pulse',
+			'description' => t('Crowd Pulse'),
+			/*'page callback' => 'get_live_updates',*/
+        	'access arguments' => array('access 3beats'),
+			'type' => MENU_NORMAL_ITEM,
+        );
+	
+
+
+	$items['celebrities/all'] = array(
+			'title' => 'Celebrities List',
+			'description' => t('Celebrities List'),
+			'page callback' => 'get_celebrities_profile_all',
+        		'access arguments' => array('access 3beats'),
+			'type' => MENU_NORMAL_ITEM,
+        );
+
+	$items['celebrities/entertainment'] = array(
+			'title' => 'Celebrities Entertainment',
+			'description' => t('Celebrities List  Entertainment'),
+			'page callback' => 'get_celebrities_profile_entertainment',
+        		'access arguments' => array('access 3beats'),
+			'type' => MENU_NORMAL_ITEM,
+        );
+	
+	$items['celebrities/sports'] = array(
+			'title' => 'Celebrities Sports',
+			'description' => t('Celebrities List  Sports'),
+			'page callback' => 'get_celebrities_profile_sports',
+        		'access arguments' => array('access 3beats'),
+			'type' => MENU_NORMAL_ITEM,
+        );
+
+	$items['celebrities/fame'] = array(
+			'title' => 'Celebrities 5 Min. fame',
+			'description' => t('Celebrities List  5 Min. fame'),
+			'page callback' => 'get_celebrities_profile_fame',
+        		'access arguments' => array('access 3beats'),
+			'type' => MENU_NORMAL_ITEM,
+        );
+
+	$items['celebrities/business'] = array(
+			'title' => 'Celebrities business',
+			'description' => t('Celebrities List  business'),
+			'page callback' => 'get_celebrities_profile_business',
+        		'access arguments' => array('access 3beats'),
+			'type' => MENU_NORMAL_ITEM,
+        );
+	
+	$items['celebrities/politics'] = array(
+			'title' => 'Celebrities politics',
+			'description' => t('Celebrities List  politics'),
+			'page callback' => 'get_celebrities_profile_politics',
+        		'access arguments' => array('access 3beats'),
+			'type' => MENU_NORMAL_ITEM,
+        );
+
+	/*$items['home'] = array(
+		'title' => 'keyword form',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('test_page'),
+		'access arguments' => array('access 3beats'),
+		'type' => MENU_NORMAL_ITEM,
+		);*/
+
+	$items['my/result'] = array(
+		'title' => 'Result Page',
+		'page callback' => 'search_result',
+		'access callback' => TRUE,
+		'type' => MENU_CALLBACK,
+		);
+
+	return $items;
+}
+
+/**
+ * Implementation of hook_init()
+ * Adds the CSS for this module
+ */
+
+
+/******************************
+ * not sure what these do
+ * 
+ ******************************/
+function get_celebrities_profile_all()
+{
+  $output="you have to show all celebrities";
+  return $output;
+}
+
+function get_celebrities_profile_entertainment()
+{
+	$output="you have to show entertainment celebrities";
+  return $output;
+}
+
+function get_celebrities_profile_sports()
+{
+	$output="you have to show entertainment sports";
+  return $output;
+}
+
+function get_celebrities_profile_fame()
+{
+	$output="you have to show entertainment fame";
+  return $output;
+}
+
+function get_celebrities_profile_business()
+{
+	$output="you have to show business ";
+	return $output;
+}
+
+function get_celebrities_profile_politics()
+{
+	$output="you have to show politics ";
+	return $output;
+}
+

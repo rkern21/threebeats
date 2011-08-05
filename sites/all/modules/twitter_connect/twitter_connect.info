@@ -1,0 +1,9 @@
+; $Id
+name = "Twitter connect"
+description = "Twitter button for user autorization"
+core = 6.x
+package = ThreeBeats
+core = "6.x"
+
+
+

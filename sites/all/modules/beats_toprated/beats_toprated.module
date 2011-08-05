@@ -1,0 +1,17 @@
+<?php
+// $Id $
+
+function beats_toprated_block($op="list",$delta=0,$edit=array()) {
+  
+    switch($op) {
+        case 'list':
+            $blocks[0]["info"] = "Top Rated";
+            return $blocks;
+        case 'view':
+            $blocks["subject"] = "Top Rated";
+            $blocks["content"] = "List of top Rated";
+            return $blocks;
+    }
+
+}
+?>

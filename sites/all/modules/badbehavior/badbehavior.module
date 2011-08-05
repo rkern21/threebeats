@@ -1,0 +1,232 @@
+<?php
+// $Id: badbehavior.module,v 1.11.4.3 2008/04/09 01:50:13 wilco Exp $
+
+define('BB2_CWD', dirname(__FILE__));
+
+/**
+ * Implementation of hook_help().
+ */
+function badbehavior_help($path, $arg) {
+  $output = '';
+  switch ($path) {
+    case "admin/reports/badbehavior":
+      $output .= t("<p>The badbehavior module examines HTTP requests of visits to your web site, and any suspicious requests are logged for later review.  The suspicious visit is shown an error page with instructions on how to view the site without triggering the bad behavior error message.");
+      break;
+  }
+  return $output;
+}
+
+/**
+  * Implementation of hook_menu().
+  */
+function badbehavior_menu() {
+  $items = array();
+
+  $items['admin/settings/badbehavior'] = array(
+    'title' => 'Bad behavior',
+    'description' => 'Configure automatic spam blocking for your site.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('badbehavior_settings'),
+    'access arguments' => array('administer bad behavior')
+  );
+  $items['admin/reports/badbehavior'] = array(
+    'title' => 'Bad behavior',
+    'description' => 'Examine the spam blocking logs for your web site.',
+    'page callback' => 'badbehavior_overview',
+    'access arguments' => array('administer bad behavior')
+  );
+  $items['admin/reports/badbehavior/event'] = array(
+    'title' => 'Details',
+    'page callback' => 'badbehavior_event',
+    'access arguments' => array('administer bad behavior'),
+    'type' => MENU_CALLBACK);
+
+  return $items;
+}
+
+function badbehavior_overview() {
+  if (file_exists(BB2_CWD .'/bad-behavior/core.inc.php') && file_exists(BB2_CWD .'/bad-behavior/version.inc.php') && file_exists(BB2_CWD .'/bad-behavior/responses.inc.php')) {
+    require_once(BB2_CWD .'/bad-behavior/version.inc.php');
+    require_once(BB2_CWD .'/bad-behavior/core.inc.php');
+    require_once(BB2_CWD .'/bad-behavior/responses.inc.php');
+  }
+  else {
+    return 'Bad Behavior is not installed correctly.';
+  }
+  $header = array(
+    array('data' => t('Response'), 'field' => 'w.http_response'),
+    array('data' => t('Reason'), 'field' => 'w.denied_reason'),
+    array('data' => t('Date'), 'field' => 'w.date', 'sort' => 'desc'),
+    array('data' => t('IP'), 'field' => 'w.ip'),
+    array('data' => t('Agent'), 'field' => 'w.user_agent', 'colspan' => 2)
+  );
+  if (variable_get('badbehavior_verbose_logging_enable', 0)) {
+    $sql = 'SELECT w.* FROM {bad_behavior_log} w '. tablesort_sql($header);
+  }
+  else {
+    $sql = "SELECT w.* FROM {bad_behavior_log} w WHERE w.key <> '00000000' " . tablesort_sql($header);
+  }
+  $result = pager_query($sql, 50);
+  while ($behave = db_fetch_object($result)) {
+    $response = bb2_get_response($behave->key);
+    $behave->localdate = bb2_convertdate($behave->date);
+    $rows[] = array('data' => array($response['response'], $response['log'], $behave->date, $behave->ip, $behave->user_agent, l(t('details'), "admin/reports/badbehavior/event/$behave->id")));
+  }
+
+  if (!$rows) {
+    $rows[] = array(array('data' => t('No log messages available.'), 'colspan' => '6'));
+  }
+
+  $output = theme('table', $header, $rows) . theme('pager', NULL, 50, 0);
+
+  return $output;
+}
+
+function badbehavior_event($id = NULL) {
+  if (file_exists(BB2_CWD .'/bad-behavior/core.inc.php') && file_exists(BB2_CWD .'/bad-behavior/version.inc.php') && file_exists(BB2_CWD .'/bad-behavior/responses.inc.php')) {
+    require_once(BB2_CWD .'/bad-behavior/version.inc.php');
+    require_once(BB2_CWD .'/bad-behavior/core.inc.php');
+    require_once(BB2_CWD .'/bad-behavior/responses.inc.php');
+  }
+  else {
+    return 'Bad Behavior is not installed correctly.';
+  }
+  $output = '';
+  $result = db_query('SELECT w.* FROM {bad_behavior_log} w WHERE w.id = %d', $id);
+  if ($behave = db_fetch_object($result)) {
+    $response = bb2_get_response($behave->key);
+    $behave->localdate = bb2_convertdate($behave->date);
+    $output .= '<table border="1" cellpadding="2" cellspacing="2">';
+    $output .= ' <tr><th>'. t('IP Addr') .'</th><td>'. $behave->ip .'</td></tr>';
+    $output .= ' <tr><th>'. t('Hostname') .'</th><td>'. gethostbyaddr($behave->ip) .' ('. l('whois', 'http://www.whois.sc/'. $behave->ip) .')</td></tr>';
+    $output .= ' <tr><th>'. t('Date') .'</th><td>'. $behave->date .'</td></tr>';
+    $output .= ' <tr><th>'. t('Request type') .'</th><td>'. $behave->request_method .'</td></tr>';
+    $output .= ' <tr><th>'. t('URI') .'</th><td>'. $behave->request_uri .'</td></tr>';
+    $output .= ' <tr><th>'. t('Protocol') .'</th><td>'. $behave->server_protocol .'</td></tr>';
+    $output .= ' <tr><th>'. t('User Agent') .'</th><td>'. $behave->user_agent .'</td></tr>';
+    $output .= ' <tr><th>'. t('Headers') .'</th><td>'. $behave->http_headers .'</td></tr>';
+    $output .= ' <tr><th>'. t('Request Entity') .'</th><td>'. $behave->request_entity .'</td></tr>';
+    $output .= ' <tr><th>'. t('Denied Reason') .'</th><td>'. $response['log'] .'</td></tr>';
+    $output .= ' <tr><th>'. t('Explanation') .'</th><td>'. $response['explanation'] .'</td></tr>';
+    $output .= ' <tr><th>'. t('Response') .'</th><td>'. $response['response'] .'</td></tr>';
+    $output .= '</table>';
+  }
+  return $output;
+}
+
+function badbehavior_perm() {
+  return array('administer bad behavior');
+}
+
+function badbehavior_settings() {
+  $form['badbehavior_email'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Administrator Email'),
+    '#default_value' => variable_get('badbehavior_email', 'badbots@ioerror.us'),
+    '#size' => 50,
+    '#maxlength' => 50,
+    '#description' => t('Administrator email address for blocked users to contact to gain access'),
+  );
+  $form['badbehavior_strict_mode_enable'] = array(
+    '#type' => 'radios',
+    '#title' => 'Enable Strict Mode',
+    '#default_value' => variable_get('badbehavior_strict_mode_enable', 0),
+    '#options' => array(t('Disabled'), t('Enabled')),
+    '#description' => t('Enable strict checking (blocks more spam but may block some people)'),
+  );
+  $form['badbehavior_verbose_logging_enable'] = array(
+    '#type' => 'radios',
+    '#title' => 'Enable Verbose Logging',
+    '#default_value' => variable_get('badbehavior_verbose_logging_enable', 0),
+    '#options' => array(t('Disabled'), t('Enabled')),
+    '#description' => t('Enables or disables verbose logging which includes all requests, not just failed ones'),
+  );
+  
+  return system_settings_form($form);
+}
+
+// Return current time in the format preferred by your database.
+function bb2_db_date() {
+  return gmdate('Y-m-d H:i:s'); // Example is MySQL format
+}
+
+// Return affected rows from most recent query.
+function bb2_db_affected_rows() {
+  return db_affected_rows();
+}
+
+// Escape a string for database usage
+function bb2_db_escape($string) {
+  return db_escape_string($string);
+}
+
+// Return the number of rows in a particular query.
+function bb2_db_num_rows($result) {
+  if ($result != FALSE)
+    return count($result);
+  return 0;
+}
+
+function badbehavior_db_errortrap($errno, $string) {
+}
+
+// Run a query and return the results, if any.
+function bb2_db_query($query) {
+  set_error_handler('badbehavior_db_errortrap');
+  $result = db_query($query);
+  restore_error_handler();
+  if ($result == FALSE)
+    return FALSE;
+  return db_affected_rows();
+}
+
+// Return all rows in a particular query.
+function bb2_db_rows($result) {
+  return $result;
+}
+
+// Return emergency contact email address.
+function bb2_email() {
+  return variable_get('badbehavior_email', "badbots@ioerror.us");
+}
+
+// write settings to database
+function bb2_write_settings($settings) {
+  return;
+}
+
+// retrieve settings from database
+function bb2_read_settings() {
+  return array(
+    'log_table' => 'bad_behavior_log',
+    'strict' => variable_get('badbehavior_strict_checking_enable', 0),
+    'verbose' => variable_get('badbehavior_verbose_logging_enable', 0));
+}
+
+// installation
+function bb2_install() {
+  if (variable_get('badbehavior_db_installed', 0) != BB2_VERSION) {
+    bb2_db_query(bb2_table_structure('bad_behavior_log'));
+    variable_set('badbehavior_db_installed', BB2_VERSION);
+  }
+}
+
+// Return the top-level relative path of wherever we are (for cookies)
+function bb2_relative_path() {
+  global $base_path;
+  return $base_path;
+}
+
+function badbehavior_boot() {
+  if (file_exists(BB2_CWD .'/bad-behavior/core.inc.php') && file_exists(BB2_CWD .'/bad-behavior/version.inc.php')) {
+    require_once(BB2_CWD .'/bad-behavior/version.inc.php');
+    require_once(BB2_CWD .'/bad-behavior/core.inc.php');
+    bb2_install();
+    bb2_start(bb2_read_settings());
+  }
+}
+
+function bb2_convertdate($bbdate) {
+  $timestamp = strtotime($bbdate .' UTC');
+  return format_date($timestamp, 'small');
+}

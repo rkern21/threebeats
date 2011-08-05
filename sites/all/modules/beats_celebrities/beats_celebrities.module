@@ -1,0 +1,38 @@
+<?php
+// $Id$
+
+function beats_celebrities_help($path, $arg) {
+    if ($path == 'admin/help#beats_celebrities')
+    $txt = 'Allows administrators to create celebrities';
+    return '<p>'. t($txt) .'</p>';
+}
+
+function beats_celebrities_menu() {
+    $items["admin/beats_celebrities/list"] = array(
+        'title' => 'Celebrities List',
+        'page_callback' => 'beats_celebrities_list',
+        'access_arguments' => array('anonymous users'),
+        'type' => MENU_CALLBACK,
+    );
+
+    return $items;
+}
+
+function beats_celebrities_block($op="list",$delta=0,$edit=array()) {
+    switch($op) {
+        case 'list':
+            $blocks[0]["info"] = t('Celebrities');
+            return $blocks;
+        case 'view':
+            $blocks["subject"] = "Celebrities";
+            $blocks["content"] = "";
+            return $blocks;
+    }
+
+    
+}
+
+function beats_celebrities_list() {
+    return 'Celebrities List';
+}
+?>

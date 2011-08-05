@@ -1,0 +1,37 @@
+name = beats
+description = Theme management for beats site.
+screenshot = screenshot.png
+
+version = "6.x-1.1"
+core = "6.x"
+project = "beats"
+datestamp = "1257845814"
+
+engine = phptemplate
+stylesheets[all][] = style.css
+stylesheets[all][] = search.css
+stylesheets[all][] = forms.css
+stylesheets[print][] = print.css
+
+; Optionally add some JavaScripts to your theme.
+scripts[] = 3beats.js
+
+regions[right_sidebar] = right sidebar
+regions[left_sidebar] = left sidebar
+regions[content] = content
+regions[footer] = footer
+regions[content_bottom] = content bottom
+regions[header] = header
+regions[facebook] = facebook
+regions[search] = search
+regions[contact_bar] = contact bar
+regions[homepage_middle] = Homepage Middle
+regions[homepage_header] = Homepage Header
+
+
+
+
+
+
+
+

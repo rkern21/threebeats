@@ -1,0 +1,68 @@
+<?php
+// $Id: badbehavior.install,v 1.1.4.2 2008/04/07 15:23:50 wilco Exp $
+
+function badbehavior_install() {
+  drupal_install_schema('badbehavior');
+}
+
+function badbehavior_schema() {
+  $schema['bad_behavior_log'] = array(
+    'description' => t('Stores hit logs for the Bad Behavior module.'),
+    'fields' => array(
+      'id' => array('type' => 'serial', 'disp-width' => 11, 'not null' => TRUE),
+      'ip' => array('type' => 'text', 'not null' => TRUE),
+      'date' => array('type' => 'datetime', 'not null' => TRUE, 'default' => '0000-00-00 00:00:00'),
+      'request_method' => array('type' => 'text', 'not null' => TRUE),
+      'request_uri' => array('type' => 'text', 'not null' => TRUE),
+      'server_protocol' => array('type' => 'text', 'not null' => TRUE),
+      'http_headers' => array('type' => 'text', 'not null' => TRUE),
+      'user_agent' => array('type' => 'text', 'not null' => TRUE),
+      'request_entity' => array('type' => 'text', 'not null' => TRUE),
+      'key' => array('type' => 'text', 'not null' => TRUE),
+    ),
+    'primary key' => array('id'),
+    'indexes' => array(
+      'ip' => array(array('ip', 15)),
+      'user_agent' => array(array('user_agent', 10)),
+    ),
+  );
+
+  return $schema;
+}
+
+function badbehavior_requirements($phase) {
+  $requirements = array();
+  if ($phase == 'runtime') {
+    if (!is_dir(BB2_CWD .'/bad-behavior')) {
+      $requirements['badbehavior'] = array(
+        'value' => t('Directory error'),
+        'severity' => REQUIREMENT_ERROR,
+        'description' => t('Bad Behavior directory not found. Please consult badbehavior/README.txt for details.'),
+      );
+    }
+    else {
+      // bad-behavior directory is present, so check for files;
+      if (file_exists(BB2_CWD .'/bad-behavior/core.inc.php') && file_exists(BB2_CWD .'/bad-behavior/version.inc.php')) {
+        $requirements['badbehavior'] = array(
+          'value' => t('Version: %version is correctly installed', array('%version' => BB2_VERSION)),
+          'severity' => REQUIREMENT_OK,
+        );
+      }
+      else {
+        $requirements['badbehavior'] = array(
+          'value' => t('Files missing'),
+          'severity' => REQUIREMENT_ERROR,
+          'description' => t('Required Bad Behavior files are not found. Please consult badbehavior/README.txt for details.'),
+        );
+      }
+    }
+    $requirements['badbehavior']['title'] = t('Bad Behavior');
+  }
+  return $requirements;
+}
+
+function badbehavior_uninstall() {
+  drupal_uninstall_schema('badbehavior');
+  db_query("DELETE FROM {variable} WHERE name LIKE 'badbehavior_%'");
+  cache_clear_all('variables', 'cache');
+}

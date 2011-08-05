@@ -1,0 +1,28 @@
+<?php 
+// $id$
+
+function live_update_comment_preprocess_node(&$variables) { 
+  // If the node being viewed has comments enabled, then initialze live update
+  $node = $variables['node'];
+  if ($variables['page'] && $node->comment) { 
+    live_update_initialize('comment-'. $node->nid);  
+    $variables['scripts'] = drupal_get_js();
+  }
+}
+
+/**
+ * Implementation of hook_comment
+ **/
+function live_update_comment_comment(&$a1, $op) { 
+  if ($op == 'insert') { 
+    // Rerender the comment stream
+    $html = comment_render(node_load($a1['nid']));
+    $settings = array( 
+      'target' => '#comments',
+      'method' => 'replaceWith',
+    );
+
+    live_update_update_content('comment-'. $a1['nid'], $html, $settings);
+  }
+}
+

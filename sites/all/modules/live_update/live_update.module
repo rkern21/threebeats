@@ -1,0 +1,126 @@
+<?php
+// $id$
+
+define('LIVE_UPDATE_UPDATE_INTERVAL', 5);
+
+/** API **/
+
+// For compatibility, JSON.php provides json_decode which are only available in PHP 5.2.0 or higher.
+require_once('JSON.php');
+
+/**
+ * Initialize and include all necessary live_update javascript files/vars
+ * Called by external modules when they're rendering a page that should be live-updated
+ *
+ * @param int $element
+ *  The unique ID of the live_update element to use. Useful for having multiple elements across a site.
+ * 
+ * @param array $default_settings
+ *  An array to pass default settings to live_update. Currently we use 'target' for the CSS Selector and the 'method' for the DOM insert/repace method
+ *  
+ */
+function live_update_initialize($element, $default_settings = NULL) {
+  drupal_add_js(drupal_get_path('module','live_update'). '/live_update.js'); // custom js file
+
+  if ($default_settings) { 
+    $settings['live_update'] = $default_settings;
+  }
+  $settings['live_update']['update_dir'] =  url(NULL,array('absolute' => TRUE)) . file_directory_path() .'/live_update/'. $element;
+  drupal_add_js($settings, 'setting');
+
+  _live_update_initialize($element);
+}
+
+/** 
+ * Call when you wish to instruct live_update that there is new content to be shown to users
+ *
+ * @param string $element
+ *  Unique Element ID of live update session
+ * 
+ * @param string $html
+ *  The rendered html of the new content
+ *
+ * @param $settings 
+ *  Provide a CSS target and jquery method to live_update on where and how to insert the new content
+ **/
+function live_update_update_content($element, $html, $settings = NULL) { 
+  _live_update_initialize($element);
+  
+  $now = time();
+  $states = _live_update_read_state($element);
+
+  foreach ($states as $rev => $state) { 
+    // We want to keep track of last revision encountered
+    $lastrev = $rev;
+
+    // Remove any states older than LIVE_UPDATE_UPDATE_INTERVAL * 2
+    if ($state->timestamp < $now - (LIVE_UPDATE_UPDATE_INTERVAL * 10)) { 
+      unset($states->$rev);
+    }
+
+  }
+  $rev = $lastrev + 1;
+  $states->{$rev}->timestamp = $now;
+  $states->{$rev}->settings = (object) $settings; // TODO: perhaps expand this and not keeping in ->settings
+
+   /* Create the rev.html file containing the rendered node view */
+  $html = preg_replace("/[\n\r]/","", $html);// remove new lines for jquery
+  _live_update_write_state($states, $element);
+  _live_update_write_content($element, $rev, $html);
+} 
+
+
+/** HELPERS (magic elves) **/
+
+/** 
+ * Make sure state object structure exists
+ **/
+function _live_update_initialize($element = 0) { 
+  $update_dir = file_directory_path().'/live_update/'.$element; 
+
+  // Create director(ies) 
+  if (!is_dir($update_dir)) { 
+    mkdir($update_dir, 0775, TRUE);
+  }
+
+  if (!is_file($update_dir.'/state.txt')) { 
+    $state[1] = array('timestamp' => time());
+    _live_update_write_state($state, $element);
+  }
+}
+
+/**
+ * Read in the current state object
+ **/
+function _live_update_read_state($element) { 
+  $update_dir = file_directory_path().'/live_update/'.$element; 
+  $fp = fopen($update_dir.'/state.txt', 'r');
+  $state = json_decode(fread($fp, filesize($update_dir.'/state.txt')));
+
+  return $state;
+}
+
+/** 
+ * Write the state object
+ **/
+function _live_update_write_state($state, $element = 0) { 
+  // Write to flesystem
+  $update_dir = file_directory_path().'/live_update/'. $element;
+  $fp = fopen($update_dir.'/state.txt', 'w');
+  $result = fwrite($fp, drupal_to_js((object) $state));
+  fclose($fp);
+
+  return $result;
+}
+
+/** 
+ * Write rendered html so live_update can grab
+ **/
+function _live_update_write_content($element, $rev, $content) {
+  $update_dir = file_directory_path().'/live_update/'. $element;
+  $fp = fopen($update_dir.'/'.$rev.'.html', 'w');
+  $result = fwrite($fp, $content);
+  fclose($fp);
+
+  return $result;
+}

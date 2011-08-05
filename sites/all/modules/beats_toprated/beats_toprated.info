@@ -1,0 +1,7 @@
+;$Id$
+name = "Beats - Top Rated"
+description = "Top Rated Celebrities"
+core = 6.x
+php = 5.1
+package = 3beats_series
+version = 0.1

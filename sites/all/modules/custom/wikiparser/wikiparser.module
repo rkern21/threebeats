@@ -1,0 +1,29 @@
+<?php
+/*
+ * Created on 25 Сер 2010
+ *
+ * To change the template for this generated file go to
+ * Window - Preferences - PHPeclipse - PHP - Code Templates
+ */
+?>
+<?php
+// $Id$
+
+function wikiparser_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  switch ($op) {
+    case 'insert':
+    case 'update':
+    	require_once('class_WikiRetriever.php');
+    	$url = "http://en.wikipedia.org/wiki/Andriy_Shevchenko";
+    	$titles = array("First_article","Second_article");
+    	$wiki = &new WikiRetriever();
+    	if (!$wiki->retrieve($url,$titles)) {
+      	die("Error: $wiki->error");
+      }
+    	else {
+    	  var_dump($wiki->pages);
+  	  }
+      die();
+    break;
+  }
+}

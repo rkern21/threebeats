@@ -1,0 +1,610 @@
+<?php
+
+/**
+ * Implementation of hook_menu() .
+ * @see http://api . drupal . org/hook_menu
+ */
+function three_beats_rest_menu() {
+  $items['json/get'] = array(
+    'title' => 'Api',
+    'page callback' => 'three_beats_rest_get_json',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['myjson/myget'] = array(
+    'title' => 'Api',
+    'page callback' => 'three_beats_rest_get_json',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['json/getcelebrity'] = array(
+    'title' => 'Api',
+    'page callback' => 'three_beats_rest_get_all_celebrities',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['json/post'] = array(
+    'title' => 'Api',
+    'page callback' => 'three_beats_rest_post_json',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['myjson/mypost'] = array(
+    'title' => 'Api',
+    'page callback' => 'three_beats_rest_post_json',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * init
+ */
+function three_beats_rest_init() {
+  module_load_include('inc', 'three_beats_rest', 'includes/views');
+
+  define('THREEBEATS_SITE_VOTE',  'vote');
+  define('THREEBEATS_SITE_ARTICLE',  'article');
+  define('THREEBEATS_SITE_CELEBRITY',  'celebrity');
+  define('THREEBEATS_SITE_PERSONAL',  'personal');
+  define('ERROR_200_OK',  8);
+  define('ERROR_304_NOT_MODIFIED',  9);
+  define('ERROR_400_BAD_REQUEST',  10);
+  define('ERROR_401_UNAUTHORIZED',  11);
+  define('ERROR_403_FORBIDDEN',  12);
+  define('ERROR_404_NOT_FOUND',  13);
+  define('ERROR_406_NOT_ACCEPTABLE',  14);
+  define('ERROR_420_ENHHANCE_YOUR_CALM',  15);
+  define('ERROR_500_INTERNAL_SERVER_ERROR',  16);
+  define('ERROR_502_BAD_GATEWAY',  17);
+  define('ERROR_503_SERVICE_UNAVAILABLE', 18);
+  define('ERROR_700_ALREADY_VOITED',  19);
+  define('ERROR_701_ARTICLE_IS_ALREADY_PRESENT',  22);
+  define('ERROR_705_UID_IS_INVALID',  40);
+  define('ERROR_706_ARTICLE_URL_IS_INVALID',  41);
+  define('ERROR_707_FIRSTNAME_LASTNAME_IS_INVALID',  42);
+  define('ERROR_708_CELEBRITY_INVALID',  43);
+  define('ERROR_709_SOURCE_INVALID',  44);
+  define('ERROR_710_VOTE_INVALID',  45);
+
+
+  if (((strpos($_SERVER['HTTP_HOST'], 'api.') === 0) && (arg(0) != 'json')) || ((strpos($_SERVER['HTTP_HOST'], 'api.') !== 0) && (arg(0) == 'json'))) {
+    drupal_access_denied();
+    die;
+  }
+}
+
+function three_beats_rest_get_json() {
+  global $base_url;
+  $fuid = $_POST['uid'] ? $_POST['uid'] : $_GET['uid'];
+  $articleURL = $_POST['articleURL'] ? $_POST['articleURL'] : $_GET['articleURL'];
+  $celebfirstName = $_POST['celebfirstName'] ? $_POST['celebfirstName'] : $_GET['celebfirstName'];
+  $celeblastName = $_POST['celeblastName'] ? $_POST['celeblastName'] : $_GET['celeblastName'];
+  $isPopup = $_POST['popup'] ? $_POST['popup'] : $_GET['popup'];
+  $source = $_POST['source'] ? $_POST['source'] : $_GET['source'];
+  $ip = $_POST['ip'] ? $_POST['ip'] : $_GET['ip'];
+  $isExistingUser = 0;
+  $lastVote = 0;
+  $lastComment = '';
+
+  $getVar = $_GET;
+  if ($getVar) {
+    unset($getVar['q']);
+    if (count($getVar) == 2 && is_numeric($fuid) && $source == 'fb') {
+      $uid = db_result(db_query("SELECT uid from {fb_user} WHERE fbu= %d", $fuid));
+      if ($uid) {
+        $account = user_load($uid);
+        print_json_result(array('existing' => 1));
+      }
+      else{
+        print_json_result(array('existing' => 0));
+      }
+    }
+  }
+
+  if (empty($fuid)) {
+    print get_json_error(ERROR_705_UID_IS_INVALID); die();
+  }
+  if ($fuid && !is_numeric($fuid)) {
+    print get_json_error(ERROR_705_UID_IS_INVALID); die();
+  }
+  if (!$articleURL) {
+    print get_json_error(ERROR_706_ARTICLE_URL_IS_INVALID); die();
+  }
+  if (!$celeblastName  && !$celebfirstName) {
+    print get_json_error(ERROR_707_FIRSTNAME_LASTNAME_IS_INVALID); die();
+  }
+
+  if ( $celeblastName && $celebfirstName ) {
+    $celebrity_nid = views_get_view_result('celebrity', 'block_6', $celebfirstName, $celeblastName);
+  }
+
+  if (!$celebrity_nid[0]->nid) {
+    print get_json_error(ERROR_708_CELEBRITY_INVALID); die();
+  }
+
+  $timeline_result = views_get_view_result('article', 'block_1', 'all', $articleURL, 'all');
+
+
+  foreach ($timeline_result as $id => $item) {
+    if ($item->node_data_field_url_field_url_url == $articleURL) {
+      $result_article = $item;
+    }
+  }
+  $celebrity_node = node_load($result_article->node_node_data_field_celebrity_nid ? $result_article->node_node_data_field_celebrity_nid : $celebrity_nid[0]->nid);
+
+  $uid = db_result(db_query("SELECT uid from {fb_user} WHERE fbu= %d", $fuid));
+  if ($uid) {
+    $account = user_load($uid);
+    $isExistingUser = 1;
+  }
+  $articles_node = node_load($result_article->nid);
+  if (empty($celebrity_node)) {
+    print get_json_error(ERROR_400_BAD_REQUEST); die();
+  }
+
+  if ($celebrity_nid[0]->nid  != $celebrity_node->nid) {
+    // If Celebrity Name taken from Get does not matched with Database loaded Celebrity,
+    // it means that _GET celebrity name is not associated with the article url .  We need to associate it
+    $celebrity_node = three_beats_chk_art_cel_assoc($celebrity_nid[0]->nid, $result_article->nid);
+  }
+
+  if ($isPopup) {
+    $chart_size = '221x69';
+  }
+  else{
+    $chart_size = '442x229';
+  }
+
+  if ($source == 'st') {
+    $voteInfo = validate_anony_vote($ip, $celebrity_node->nid);
+    //echo $ip . '/' . $celebrity_node->nid;
+    if (is_array($voteInfo)) { // if true it mean user can vote
+      $alreadyvoted=1; // Anonymous user cannot vote
+      $lastVote = $voteInfo[0]->node_data_field_hostname_field_vote_rate_rating/25 == 0? 0: '+' .  $voteInfo[0]->node_data_field_hostname_field_vote_rate_rating/25;
+      $lastComment = $voteInfo[0]->node_data_field_hostname_field_vote_comment_value;
+    }
+    else{
+      $alreadyvoted=0; // Anonymous user can vote
+    }
+  }
+  else{
+    if (!validate_vote($uid, $celebrity_node->nid)) {
+      $alreadyvoted=1;
+      $voteInfo = views_get_view_result('celebrity', 'block_2', $uid, $celebrity_node->nid);
+      $lastVote = $voteInfo[0]->node_data_field_vote_rate_field_vote_rate_rating/25 == 0? 0: '+' .  $voteInfo[0]->node_data_field_vote_rate_field_vote_rate_rating/25;
+      $lastComment = $voteInfo[0]->node_data_field_vote_rate_field_vote_comment_value;
+
+    }
+    else{
+      $alreadyvoted=0;
+    }
+  }
+
+  if (is_array($celebrity_node->taxonomy)) {
+    foreach ($celebrity_node->taxonomy as $termID => $termData) {
+      if ($termData->vid == 1) {
+        $category = $termData->name;
+      }
+    }
+  }
+
+  // 2 users that have voted on the same celebrity
+  $userVoted = views_get_view_result('celebrity_ext', 'block_2', $celebrity_node->nid);
+  //print_r($userVoted);
+  $voters_voted = '';
+  $i = 1;
+  if (is_array($userVoted)) {
+    foreach ($userVoted as $key => $value) {
+      if(!empty($value->users_picture))
+      $pic = $base_url . '/' . $value->users_picture;
+      else
+      $pic = $value->node_data_field_twitter_author_field_twitter_profile_image_url_value;
+      if (!empty($value->node_users_node_data_field_first_name_field_first_name_value)) {
+        $voters_voted['friend' . $i] = array(
+                    'name' => $value->node_users_node_data_field_first_name_field_first_name_value . ' ' . $value->node_users_node_data_field_first_name_field_last_name_value ,
+                    'pic' => $pic,
+                    'comment' => $value->node_data_field_twitter_author_field_vote_comment_value,
+                    'vote' =>  $value->node_data_field_twitter_author_field_vote_rate_rating/25 == 0? 0: '+' .  $value->node_data_field_twitter_author_field_vote_rate_rating/25,
+        );
+      }
+      else{
+        $voters_voted['friend' . $i] = array(
+                    'name' => $value->node_data_field_twitter_author_field_twitter_author_value,
+                    'pic' => $pic,
+                    'comment' => $value->node_data_field_twitter_author_field_vote_comment_value,
+                    'vote' =>  $value->node_data_field_twitter_author_field_vote_rate_rating/25 == 0? 0: '+' .  $value->node_data_field_twitter_author_field_vote_rate_rating/25,
+        );
+      }
+      $i++;
+    }
+  }
+
+  $CelebImageUrl = three_beats_celebrity_imagecache('189x245', $celebrity_node);
+  $result = array(
+            'aid' => ($result_article->nid ? $result_article->nid : NULL),
+            'alreadyvoted' => $alreadyvoted,
+            'existing' => $isExistingUser,
+            'last_vote' => $lastVote,
+            'last_comment' => $lastComment,
+            'username' => $account->name,
+            'cid' => $celebrity_node->nid,
+            'celebURL' => str_replace( 'api . ', '', url('node/'  .  $celebrity_node->nid, array('absolute' => TRUE))),
+            'celebpic' => url($CelebImageUrl, array('absolute' => TRUE)),
+            'celebrity_chart' => url(_beats_get_rating_chart(_beats_get_rating_data($celebrity_node, $period = '1d'), TRUE, $chart_size), array('absolute' => TRUE)),
+            'friends' => $voters_voted,
+  );
+
+  print_json_result($result);
+}
+
+function print_json_result($array) {
+  print $_REQUEST['jsoncallback'];
+  print '(';
+  drupal_json($array);
+  print ')';
+  die;
+}
+
+/**
+ * get json array with error
+ */
+function get_json_error($error_id) {
+  $error_obj =  taxonomy_get_term($error_id);
+  $array = array('name' => $error_obj->name, 'description' => $error_obj->description);
+  // We are returning JavaScript, so tell the browser .
+  drupal_set_header('Content-Type: application/x-javascript; charset=utf-8');
+
+  if (isset($array)) {
+    print_json_result($array);
+  }
+}
+
+/**
+ * Create and record vote object in the database
+ * @param $account mixed - user object
+ * @param $articleURL string
+ * @param $comment string
+ * @param $vote_rate int
+ * @param $cid int - celebrity id
+ * @param $arcicleid int
+ * @param $location string
+ * @param $ip string - Store IP address if user is anonymous .
+ * @return mixed
+ */
+function three_beats_rest_create_vote($account, $articleURL, $comment, $vote_rate, $cid, $arcicleid = NULL, $location = "N/A", $ip = '') {
+  if (!is_object($account)) {
+    $account = user_load($account);
+  }
+  $celebrityName = db_result(db_query('SELECT CONCAT(field_firstname_value, " ", field_lastname_value) as name FROM {content_type_celebrity} WHERE nid=%d', $cid));
+  $title = array();
+  $title[] = $location;
+  $title[] = $account->name;
+  $title[] = $ip;
+  $title[] = $celebrityName;
+  $title[] = date('Y/m/d', time());
+  $title[] = $vote_rate/25 == 0? 0: '+' .  $vote_rate/25;
+  $vote = new stdClass();
+  $vote->type = THREEBEATS_SITE_VOTE;
+  $vote->status = 1;
+  $vote->title = implode(' - ', $title); //$articleURL  .  date('d/Y/m', time());
+  $vote->uid = $account->uid;
+  $vote->name = $account->name;
+  $vote->field_vote_comment[0]['value'] = $comment;
+  $vote->field_vote_rate[0]['rating'] = $vote_rate;
+  $vote->field_article[0]['nid'] = $arcicleid;
+  $vote->field_celebrity[0]['nid'] = $cid;
+  $vote->field_hostname[0]['value'] = $ip;
+  $vote->created = time();
+
+  // Create the node .
+  $vote = node_submit($vote);
+  node_save($vote);
+
+  return $vote;
+}
+
+function three_beats_rest_post_json() {
+  global $user;
+  $vote_rate = $_POST['vote'] ? $_POST['vote'] : $_GET['vote'];
+  $articleURL = $_POST['articleURL'] ? $_POST['articleURL'] : $_GET['articleURL'];
+  $articleid = $_POST['aid'] ? $_POST['aid'] : $_GET['aid'];
+  $fuid = $_POST['uid'] ? $_POST['uid'] : $_GET['uid'];
+  $comment = $_POST['comment'] ? $_POST['comment'] : $_GET['comment'];
+  $cid = $_POST['cid'] ? $_POST['cid'] : $_GET['cid'];
+  $atitle = $_POST['atitle'] ? $_POST['atitle'] : $_GET['atitle'];
+
+  $source = $_POST['source'] ? $_POST['source'] : $_GET['source'];
+  $ip = $_POST['ip'] ? $_POST['ip'] : $_GET['ip'];
+  $name = $_POST['name'] ? $_POST['name'] : $_GET['name'];
+  $email = $_POST['email'] ? $_POST['email'] : $_GET['email'];
+
+  $uid = db_result(db_query("SELECT uid from {fb_user} WHERE fbu= %d", $fuid));
+  if ($uid) {
+    $user = user_load($uid);
+  }
+  elseif ($source == 'fb') {
+    if (!empty($name) && is_numeric($fuid) && valid_email_address($email)) {
+      $account = fb_user_get_local_user($fuid);
+      if (!$account) {
+        $edit = array();
+        $edit['name'] = $name;
+        $edit['mail'] = $email;
+        // All Drupal users get authenticated user role .
+        $edit['roles'][DRUPAL_AUTHENTICATED_RID] = 'authenticated user';
+        if (isset($edit['name']) && $edit['name']) {
+          $username = $edit['name'];
+        }
+        else {
+          // Fallback, should never be reached .
+          $username = "$fuid@facebook";
+          $edit['name'] = $username;
+        }
+        // Fill in any default that are missing .
+        $defaults = array(
+                    'pass' => user_password(),
+                    'init' => db_escape_string($fuid  .  '@facebook'), // Supposed to be email, but we may not know it . 
+                    'status' => 1,
+        );
+        // Merge defaults
+        $edit = array_merge($defaults, $edit);
+        // Create user
+        $account = user_save('', $edit);
+        // Map with fb_user table;
+        _fb_user_set_map($account, $fuid);
+        // Store in $user variable for further processing .
+        $user = $account;
+        $uid = $account->uid;
+
+      }
+      else{
+        // Store in $user variable for further processing .
+        $user = $account;
+        $uid = $account->uid;
+      }
+    }
+  }
+  elseif ($source == 'st') {
+    $uid = 111;
+  }
+  else {
+    print get_json_error(ERROR_709_SOURCE_INVALID);
+    die('');
+  }
+
+  if (empty($fuid)) {
+    print get_json_error(ERROR_705_UID_IS_INVALID); die();
+  }
+  if ($fuid && !is_numeric($fuid)) {
+    print get_json_error(ERROR_705_UID_IS_INVALID); die();
+  }
+  if (!$articleid && !$articleURL) {
+    print get_json_error(ERROR_706_ARTICLE_URL_IS_INVALID); die();
+  }
+  if (!$cid) {
+    print get_json_error(ERROR_708_CELEBRITY_INVALID); die();
+  }
+  if ( $vote_rate > 2 || $vote_rate < -2 || $vote_rate == 0 ) {
+    print get_json_error(ERROR_710_VOTE_INVALID);
+    die;
+  }
+  /*if ($articleURL) {
+   $article_present = views_get_view_result('article', 'block_1', $uid, $articleURL, 'all', $cid);
+   if (!empty($article_present)) {
+   print get_json_error(ERROR_701_ARTICLE_IS_ALREADY_PRESENT);
+   die;
+   }
+   }*/
+  // Check if $articleid present
+
+
+  $vote_rate = ($vote_rate + 2) * 25;
+
+  $article_crete = TRUE;
+  if (!$articleid) {
+    $article_isset = views_get_view_result('article', 'block_1', 'all', $articleURL);
+    if (!$article_isset) {
+      $page_info = three_beats_rest_get_page_info($articleURL);
+      $article = three_beats_rest_create_article($uid, ($atitle ? $atitle : $page_info['title']), $cid, $articleURL, $page_info['description'], $page_info['keywords']);
+      $articleid = $article->nid;
+      $article_crete = $articleid ? TRUE : FALSE;
+    }
+    else {
+      $articleid = $article_isset[0]->nid;
+      $articleid_new = $article_isset[0]->nid;
+      $celebrity_node = three_beats_chk_art_cel_assoc($cid, $articleid_new);
+    }
+  }
+  else {
+    $article_isset = views_get_view_result('article', 'block_1', 'all', 'all', $articleid);
+    if(is_array($article_isset)) {
+      $articleURL = $article_isset[0]->node_data_field_url_field_url_url;
+    }
+    else {
+      print get_json_error(ERROR_706_ARTICLE_URL_IS_INVALID);
+      die;
+    }
+  }
+  if ($source == 'fb' && !validate_vote($uid, $cid)) {
+    print get_json_error(ERROR_700_ALREADY_VOITED);
+    die;
+  }
+  elseif ($source == 'st' && is_array(validate_anony_vote($ip, $cid))) {
+    print get_json_error(ERROR_700_ALREADY_VOITED);
+    die;
+  }
+  //var_dump($source == 'st' && is_array(validate_anony_vote($ip, $cid)));
+  // echo $ip."<br />";
+  // echo $cid."<br />";
+  // print_r(validate_anony_vote($ip, $cid));
+  // echo "<br />";
+  // die('3');
+  $source == 'st'? $ipaddress = $ip: '';
+  //printf(' "%s" "%s" "%s" "%s" "%s" "%s" "%s" "%s"', $uid, $articleURL, $comment, $vote_rate, $cid, $articleid, 'FF-Addon', $ipaddress);die;
+  $vote = three_beats_rest_create_vote($uid, $articleURL, $comment, $vote_rate, $cid, $articleid, 'FF-Addon', $ipaddress);
+
+  print_json_result($article_crete);
+  die;
+}
+
+function three_beats_rest_get_page_info($url) {
+  $content = file_get_contents($url);
+
+  if (eregi("<title>( . *)</title>", $content, $title)) {
+    $title = $title[1];
+  }
+
+  $page_data = get_meta_tags($url);
+  $page_data['title'] = $title;
+  return $page_data;
+}
+
+function three_beats_rest_create_article($account, $title, $cid, $url, $description = NULL, $keywords = NULL) {
+  if (!is_object($account)) {
+    $account = user_load($account);
+  }
+
+  $article = new stdClass();
+  $article->type = THREEBEATS_SITE_ARTICLE;
+  $article->status = 1;
+  $article->title = $title ? $title : $cid;
+  $article->uid = $account->uid;
+  $article->name = $account->name;
+  $article->field_url[0]['url'] = $url;
+  $article->field_url[0]['attributes']['target'] = 'default';
+  $article->field_meta_description[0]['value'] = $description;
+  $article->field_meta_keywords[0]['value'] = $keywords;
+  $article->field_celebrity[0]['nid'] = $cid;
+
+  // Create the node .
+  $article = node_submit($article);
+  node_save($article);
+
+  return $article;
+}
+
+function three_beats_rest_get_celebrity_list_view() {
+
+  $view = views_get_view('celebrity');
+  $view->set_arguments();
+  $view->set_display('block_1');
+  $view->pre_execute();
+  $view->execute();
+  $timeline_result = $view->result;
+
+  return $timeline_result;
+
+}
+
+function three_beats_rest_get_all_celebrities() {
+  $celebrities_view = three_beats_rest_get_celebrity_list_view();
+  $celebrities = array();
+  foreach ($celebrities_view as $item) {
+    $celebrities[] = array(
+      'nid' => $item->nid,
+      'first_name' => $item->node_data_field_firstname_field_firstname_value,
+      'last_name' => $item->node_data_field_firstname_field_lastname_value,
+    );
+  }
+
+  print_json_result($celebrities);
+}
+
+/*
+ * Implementation of hook_fb_user
+ */
+function three_beats_rest_fb_user($op, $data, $return) {
+  if ($op == 'post_user') {
+    $fb = $data['fb'];
+    $fbu = $fb->getUser();
+
+    db_query('INSERT INTO {fb_user_ext} (uid, fbu, hostname, timestamp) VALUES (%d, "%s", "%s", %d)', $data['account']->uid, $fbu, ip_address(), $data['account']->created);
+
+    //$params['query'] = "SELECT pid FROM photo WHERE aid IN ( SELECT aid FROM album WHERE owner='" . $fbu . "') ORDER BY created DESC LIMIT 1,42";
+    //$params['method'] = 'fql . query';
+    //$params['access_token'] = fb_get_token($fbu);
+    //$result = $GLOBALS['_fb']->api($params);
+
+
+  }
+
+  if ($op == 'post_user_disconnect') {
+    db_query('DELETE FROM {fb_user_ext} WHERE uid=%d', $account->uid);
+  }
+}
+
+/**
+ * Implementation of hook_user() .
+ */
+function three_beats_rest_user($op, &$edit, &$account, $category = NULL) {
+  if ($op == 'update' && $category == 'fb_user') {
+    if ($edit['map']) {
+      // Delete any pre-existing mapping that might exist for this local uid or fbu .
+      db_query("DELETE FROM {fb_user_ext} WHERE uid=%d OR fbu=%d", $account->uid, $edit['map']);
+
+      // Create the new mapping .
+      db_query('INSERT INTO {fb_user_ext} (uid, fbu, hostname, timestamp) VALUES (%d, "%s", "%s", %d)', $account->uid, $edit['map'], ip_address(), time());
+    }
+    else {
+      // Delete account mapping, because administrator has unchecked the connect option .
+      db_query('DELETE FROM {fb_user_ext} WHERE uid=%d', $account->uid);
+    }
+  }
+  elseif ($op == 'delete') {
+    db_query('DELETE FROM {fb_user_ext} WHERE uid=%d', $account->uid);
+  }
+}
+
+/*
+ * Search multi level array only with 1 level deep
+ * @param $needle - String to be searched
+ * @param $arr - array in which string to be searched
+ * @return TRUE if found $needfound
+ */
+function three_beats_in_array($needle, $arr = array()) {
+  $arr = array_values($arr);
+  foreach($arr as $key => $values) {
+    if(is_array($values)) {
+      foreach($values as $one_key => $one_value) {
+        if($needle == $one_value) {
+          return TRUE;
+        }
+      }
+    }
+    else {
+      if($needle == $values) {
+        return TRUE;
+      }
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Checks association between Celebrity & Article.If doesn't exists, it creates.
+ * @param $celebId
+ * @param $artId
+ * @return $celebrity_node
+ */
+function three_beats_chk_art_cel_assoc($celebId, $artId) {
+  $celebrity_node = array();
+  $node = node_load($artId);
+  if($node->nid) {
+    $ar_node = $node->field_celebrity;
+    if (!three_beats_in_array($celebId, $ar_node)) {
+      $node->field_celebrity[]['nid'] = $celebId;
+      node_save($node);
+      $celebrity_node = node_load($celebId);
+    }
+    else {
+      $celebrity_node = node_load($celebId);
+    }
+  }
+  return $celebrity_node;
+}

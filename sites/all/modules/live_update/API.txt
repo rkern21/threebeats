@@ -1,0 +1,74 @@
+$Id: API.txt,v 1.1 2009/03/04 23:24:41 johnskulski Exp $
+
+Live Update API
+=====
+
+Live Update API aims to be a scalable, simple, and flexible framework for getting updating content with Asynchronous HTTP requests and without requiring page reloads.
+
+This whole process is (essentially) broken down into two steps:
+
+1) Tell Drupal that new content is ready.
+  - live_update_update_content($element, $html, $settings) 
+  - This function is called when you want to alert live_update that new content is ready. Typically this is done on a submit or edit of the content type (node, comment, user, etc) you are watching..
+
+2) Tell Drupal when to start looking for new content
+  - live_update_initialize($element, $settings)
+  - This function is called to initialize the Javascript on the user's browsers to start polling to see when there is new contype
+
+Example Use of Live Update API
+====
+
+The live_update_* included with the API are simple implementations of the API and are good examples of how it could be used. 
+
+
+How does it work?
+====
+
+Live Update works by keeping a list of new content that has been created/updated.
+The javascript included with Live Update then polls this list and sees if there is content, if so it grabs the new content and inserts into the DOM based on rules given in $settings. 
+
+
+How is the list and content stored?
+====
+
+Currently, we use flat text files that store JSON objects or static HTML. This is fast, scalable, does not require a Drupal bootstrap, and can be cached aggressively. In the future DB and memcache support will be big gains.
+
+
+/** API FUNCTIONS **/
+
+live_update_initialize($element, $default_settings = NULL) 
+=====
+
+$element is a unique string that identifies the instance of live chat. It is used as the subdirectory within the files directory to hold the state files. 
+$settings are used as default settings for this live update element. These are used if no content update specific settings are set. (See $settings section)
+
+live_update_update_content($element, $html, $settings = NULL) 
+=====
+
+$element is a unique string that identifies the instance of live chat. It is used as the subdirectory within the files directory to hold the state files.
+$html is the rendered html that live update will store and later display to the users.
+$settings are the settings specific to this content update. 
+
+The $settings variable
+=====
+
+The $settings variable is a way to tell where content will be located and how to handle it. 
+$settings sent to live_update_intialize($element, $settings) acts as the default settings if the setting is not present in the content_update. (See $settings section)
+$settings currently supported are: 
+
+target -- this is a CSS selector that will be the 'target' of the method run
+method -- a name of a jquery method that will be run to insert 
+
+For example, 
+
+    $settings = array(
+      'target' => '#comments'
+      'method' => 'after'
+    );
+
+Assuming $data holds the html of the new content, this will be translated into the JQuery string
+
+$('#comments').after($data);
+
+
+

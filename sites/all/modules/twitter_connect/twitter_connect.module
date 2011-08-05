@@ -1,0 +1,349 @@
+<?php
+
+/**
+ * Implementation of hook_menu().
+ * @see http://api.drupal.org/hook_menu
+ * $consumer_key = 'fARAVds1iclzJ2ZqvUpyoQ';
+ * $consumer_secret = 'dg2DrNChKi7fJfm7TUVoK8PrBtdNo3zBqCNOzTUU';
+ */
+
+function twitter_connect_menu() {
+	$items = array();
+
+	$items['twittersignin'] = array(
+	'title' => 'Crowd Pulse',
+	'page callback' => 'twittersignin',
+	'access callback' => TRUE,
+	'type' => MENU_CALLBACK,
+	);
+
+	$items['twittersignout'] = array(
+    'title' => 'Crowd Pulse',
+    'page callback' => 'twittersignout',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+	);
+
+	$items['admin/twitter_settings']=array(
+    'title'=>t('Twitter settings'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('twitter_form_settings'),
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+	);
+
+	return $items;
+}
+
+
+/**
+ * Return twitter button
+ */
+function get_twitter_button(){
+
+	module_load_include('php','twitter_connect','EpiCurl');
+	module_load_include('php','twitter_connect','EpiOAuth');
+	module_load_include('php','twitter_connect','EpiTwitter');
+
+
+	$consumer_key = variable_get('consumer_key','');
+	$consumer_secret = variable_get('consumer_secret','');
+
+	// Create a new Twitter object
+	$twitterObj = new EpiTwitter($consumer_key, $consumer_secret);
+
+
+	// If user is not logged-in to Twitter or hasn't authorized 3beats then, show twitter sign in button
+	// Else, show sign out button and print fetched user info from twitter
+	if($_COOKIE['myCookie1']=="" or $_COOKIE['myCookie2']=="")
+	{
+		$twitterButton = '<a href="'. $twitterObj->getAuthorizationUrl() .'" class="firefox"><img src="' . url('sites/all/modules/twitter_connect/images/twittin.png', array('absolute' => TRUE)) . '" /></a>';
+	}
+	else
+	{
+		$twitterButton = '<a href="'. url('twittersignout', array('absolute' => TRUE )) .'" class="firefox"><img src="'. url('sites/all/modules/twitter_connect/images/twittout.png', array('absolute' => TRUE )) . '" /></a>';
+		/*
+		 $twitterObj->setToken($_COOKIE['myCookie1'], $_COOKIE['myCookie2']);
+		 $twitter_user = $twitterObj->get_accountVerify_credentials();
+		 $userInfo = $twitter_user->response;
+		 echo "<center>::TWITTER fetched user info::<br />";
+		 echo "Name: ".$userInfo['name']."<br />";
+		 echo "Screename: ".$userInfo['screen_name']."<br />";
+		 echo "<img src='". $userInfo['profile_image_url']."' /><br />";
+		 echo "Location: ".$userInfo['location']."<br />";
+		 echo "</center>";*/
+	}
+
+	return $twitterButton;
+}
+
+
+/**
+ * Twitter sign in
+ */
+function twittersignin(){
+
+	module_load_include('php','twitter_connect','EpiCurl');
+	module_load_include('php','twitter_connect','EpiOAuth');
+	module_load_include('php','twitter_connect','EpiTwitter');
+
+	$consumer_key = variable_get('consumer_key','');
+	$consumer_secret = variable_get('consumer_secret','');
+
+	$twitterObj = new EpiTwitter($consumer_key, $consumer_secret);
+	$twitterObj->setToken($_GET['oauth_token']);
+	$token = $twitterObj->getAccessToken();
+
+	setcookie('myCookie1', $token->oauth_token, 0, '/');
+	setcookie('myCookie2', $token->oauth_token_secret, 0, '/');
+
+	$twitterObjAccount = new EpiTwitter($consumer_key, $consumer_secret);
+	$twitterObjAccount->setToken($token->oauth_token, $token->oauth_token_secret);
+	$twitter_user = $twitterObjAccount->get_accountVerify_credentials();
+
+	$userInfo = $twitter_user->response;
+
+	if ($userInfo['id']){
+		$sql = "SELECT uid FROM users WHERE name = '%s'";
+		$reg_user = db_fetch_object(db_query($sql, $userInfo['id'].'@twitter'));
+
+		if($reg_user->uid)
+		{
+			global $user;
+			$user = user_load($reg_user->uid);
+		}
+		else
+		{
+			// get avatar
+			if($userInfo['profile_image_url']){
+				$pic_file=file_get_contents($userInfo['profile_image_url']);
+				$arr = parse_url ($userInfo['profile_image_url']);
+				$pic_name = basename( $arr["path"] );
+				$pic_path = 'sites/default/files/pictures/'.$userInfo['id'].'_'.$pic_name;
+				file_put_contents($pic_path,$pic_file);
+			}
+
+			$current_user = user_save('', array(	'name' => $userInfo['id'].'@twitter',
+													'mail' => $userInfo['id'].'@twitter.com',
+													'pass' => md5($userInfo['id']),
+													'status' => '1',
+													'created' => time(),
+													'picture' => $pic_path
+			)
+			);
+
+			$account_profile = content_profile_load('personal',$current_user->uid);
+
+			if(!$account_profile){
+				$account_profile 		= new stdClass;
+				$account_profile->status= 1;
+				$account_profile->title = $userInfo->name." personal info";
+				$account_profile->type	= 'personal';
+				$account_profile->name 	= $userInfo->name;
+				$account_profile->uid 	= $current_user->uid;
+			}
+
+			$account_profile->field_first_name[0]['value'] = $userInfo['name'];
+			$account_profile->field_last_name[0]['value'] = "";
+
+			$account_profile = node_submit($account_profile);
+			node_save($account_profile);
+
+			// login registered user
+			global $user;
+			$user = user_load($current_user->uid);
+		}
+	}
+
+	//header("Location: http://www.3beats.com/beta/index.php");
+	//url('', array('absolute' => TRUE));
+	drupal_goto();
+}
+
+
+/**
+ * Twitter sign out
+ */
+function twittersignout(){
+	setcookie('myCookie1', '', time()-3600, '/');
+	setcookie('myCookie2', '', time()-3600, '/');
+
+	//header("Location: http://www.3beats.com/beta/index.php");
+	//url('', array('absolute' => TRUE));
+
+	global $user;
+	$user = drupal_anonymous_user();
+
+	drupal_goto();
+}
+
+function twitter_form_settings(&$form_state, $type=NULL) {
+	$form_state['type'] = $type;
+
+	$form['consumer_key'] = array(
+    '#type' => 'textfield',
+    '#title' => t("Twitter consumer key"),
+    '#default_value' => variable_get('consumer_key',''),
+    '#description' => t('Twitter consumer key'),
+    '#weight' => 0,
+	);
+
+	$form['consumer_secret'] = array(
+    '#type' => 'textfield',
+    '#title' => t("Twitter consumer secret"),
+    '#default_value' => variable_get('consumer_secret',''),
+    '#description' => t('Twitter consumer secret'),
+    '#weight' => 0,
+	);
+
+	$form['add_from_twitter'] = array(
+    '#type' => 'checkbox',
+    '#title' => t("Add vote from twitter"),
+    '#default_value' => variable_get('add_from_twitter',''),
+    '#description' => t('Add vote from twitter when celebrity insert or update'),
+    '#weight' => 1,
+	);
+
+	$form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+    '#weight' => 10,
+	);
+
+	$form['#submit'][] = 'twitter_key_secret_save';
+	return $form;
+}
+
+function twitter_key_secret_save(&$form, &$form_state){
+	variable_set('consumer_key',$form_state['clicked_button']['#post']['consumer_key']);
+	variable_set('consumer_secret',$form_state['clicked_button']['#post']['consumer_secret']);
+	variable_set('add_from_twitter',$form_state['clicked_button']['#post']['add_from_twitter']);
+}
+
+
+
+/**
+ * Create and record vote object in the database
+ * @param $account mixed - user object
+ * @param $articleURL string
+ * @param $comment string
+ * @param $vote_rate int
+ * @param $cid int - celebrity id
+ * @param $arcicleid int
+ * @param $celebrityName string
+ * @param $location string
+ * @return mixed
+ */
+function three_beats_rest_create_twittervote($account, $articleURL, $comment, $vote_rate, $cid, $arcicleid = NULL,$twitter_author="",$twitter_profile_image_url="", $time="", $celebrityName = "", $location = "N/A"){
+	if(!is_object($account)){
+		$account = user_load($account);
+	}
+
+	$title = array();
+	$title[] = $location;
+	$title[] = $twitter_author;
+	$title[] = $celebrityName;
+	$title[] = date('Y/m/d', time());
+	$title[] = $vote_rate/25 == 0? 0: '+'. $vote_rate/25;
+	$vote = new stdClass();
+	$vote->type = THREEBEATS_SITE_VOTE;
+	$vote->status = 1;
+	$vote->title = implode(' - ', $title); //'Twitter: ' . date('Y/m/d', time()); // $articleURL . date('d/Y/m', time());
+	$vote->uid = $account->uid;
+	$vote->name = $account->name;
+	$vote->field_vote_comment[0]['value'] = $comment;
+	$vote->field_vote_rate[0]['rating'] = $vote_rate;
+	$vote->field_article[0]['nid'] = $arcicleid;
+	$vote->field_celebrity[0]['nid'] = $cid;
+	$vote->field_twitter_author[0]['value'] = $twitter_author;
+	$vote->field_twitter_profile_image_url[0]['value'] = $twitter_profile_image_url;
+	$vote->date = !empty($time) ? $time : format_date(time(), 'custom', 'Y-m-d H:i:s O');
+	// Create the node.
+	$vote = node_submit($vote);
+	node_save($vote);
+
+	return $vote;
+}
+
+
+/**
+ * twitter connectn node api
+ */
+
+function twitter_connect_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL){
+
+	if(variable_get('add_from_twitter','')){
+		switch ($op) {
+			case 'update' :
+				if(trim($node->type)=='celebrity'){
+					$celebrity_name = str_replace(" ","+",$node->title);
+					//p($node->field_since_id['0']);
+					if(!empty($node->field_since_id['0']['value'])) {
+						$since_id = "&since_id=".trim($node->field_since_id['0']['value']);
+					}else{
+						$since_id = '';
+					}
+					$url = "http://search.twitter.com/search.json?q=\"".$celebrity_name.$since_id."\"";
+					//p($url);die;
+					$twitter_json = file_get_contents($url);
+					$data = json_decode($twitter_json, TRUE);
+					if($data){
+						if(is_array($data['results'])) {
+							foreach($data['results'] as $key=>$value){
+								$sql = "SELECT * FROM content_type_vote WHERE field_vote_comment_value = '%s'";
+								$twitter_info = db_fetch_object(db_query($sql, $value['text']));
+								if(!$twitter_info){
+									// three_beats_rest_create_twittervote(TWITTER_USER,'http://twitter.com ',$value['text'],50,$node->nid,NULL,$value['from_user'],$value['profile_image_url'], $value['created_at'], $node->title, 'Twitter');
+								}
+							}
+							// db_query("Update {content_type_celebrity} SET field_since_id_value = '%s' WHERE nid = %d", $data['max_id_str'], $node->nid);
+							// Clear the page and block caches.
+							cache_clear_all();
+						}
+					}
+				}
+				break;
+		}
+	}
+}
+
+
+/**
+ * Get votes form twitter for all celebrities
+ *
+ */
+function twitter_connect_cron(){
+
+	$query = db_query("SELECT n.nid, n.title, field_since_id_value FROM node as n INNER JOIN content_type_celebrity ctc ON ctc.nid=n.nid WHERE n.status <> 0 AND n.type='%s'" , 'celebrity');
+
+	while ($node = db_fetch_object($query)) {
+
+		$celebrity_name = str_replace(" ","+",$node->title);
+		if(!empty($node->field_since_id_value)) {
+			$since_id = "&since_id=".trim($node->field_since_id_value);
+		}else{
+			$since_id = '';
+		}
+
+		$url = "http://search.twitter.com/search.json?q=\"".$celebrity_name.$since_id."\"";
+
+		$twitter_json = @file_get_contents($url);
+
+		$data = json_decode($twitter_json, TRUE);
+		if($data){
+			if(is_array($data['results'])) {
+				foreach($data['results'] as $key=>$value){
+					$sql = "SELECT * FROM content_type_vote WHERE field_vote_comment_value = '%s'";
+					$twitter_info = db_fetch_object(db_query($sql, $value['text']));
+					if(!$twitter_info){
+						// three_beats_rest_create_twittervote(TWITTER_USER,'http://twitter.com ',$value['text'],50,$node->nid,NULL,$value['from_user'],$value['profile_image_url'], $value['created_at'], $node->title, 'Twitter');
+					}
+				}
+				// db_query("Update {content_type_celebrity} SET field_since_id_value = '%s' WHERE nid = %d", $data['max_id_str'], $node->nid);
+
+			}
+		}
+	}
+	// Clear the page and block caches.
+	cache_clear_all();
+}

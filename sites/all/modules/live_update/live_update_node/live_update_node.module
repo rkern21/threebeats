@@ -1,0 +1,61 @@
+<?php
+// $id$
+
+/**
+ * Implementation of hook_enable
+ **/
+function live_update_node_enable() { 
+  // enable our menu_altering
+  menu_cache_clear_all();
+}
+
+/** 
+ * Implementation of hook_menu_alter
+ **/
+function live_update_node_menu_alter(&$items) { 
+  $items['node']['page callback'] = 'live_update_node_node_page_default';
+}
+
+/**
+ * Wrapper for node page default
+ **/
+function live_update_node_node_page_default() { 
+  $settings = array(
+    'target' => '.live-update-node-page .node',
+    'method' => 'before',
+    'effect' => 'fade',
+  );
+
+  live_update_initialize('node', $settings); 
+
+  $output .= '<div class="live-update-node-page">';
+  $output .= node_page_default();
+  $output .= '</div>';
+ 
+  return $output;
+}
+
+
+/** 
+ * Implementation of hook_nodeapi
+ **/
+function live_update_node_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) { 
+  if ($node->status && $node->promote) { 
+    switch ($op) { 
+      case 'insert':
+        $html = node_view(node_load($node->nid));
+        live_update_update_content('node', $html);
+        break;
+
+      case 'update':
+        $settings = array( 
+          'target' => '#node-'. $node->nid,
+          'method' => 'replaceWith', 
+        );
+
+        $html = node_view(node_load(array('nid' => $node->nid))); // Grab from DB, not cache
+        live_update_update_content('node', $html, $settings);
+        break;
+    }
+  }
+}

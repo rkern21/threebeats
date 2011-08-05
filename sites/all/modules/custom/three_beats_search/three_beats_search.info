@@ -1,0 +1,6 @@
+; $Id
+name = Three beates search
+description = Module that provide search functionality for system.
+
+package = ThreeBeats
+core = 6.x
