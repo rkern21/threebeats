@@ -118,7 +118,7 @@ function three_beats_init() {
  * @see http://api.drupal.org/hook_form_alter
  */
 function three_beats_form_alter(&$form, &$form_state, $form_id) {
-
+	/* Ryan Kern */ watchdog('three_beats_form_alter', 'three_beats_form_alter: ' . $form_id);
 	global $user;
 	switch ($form_id){
 		case 'celeb_import_node_form':
@@ -206,6 +206,19 @@ function three_beats_form_alter(&$form, &$form_state, $form_id) {
 
 			}
 			break;
+/* Ryan Kern
+		case 'search_celebrity':
+			drupal_add_js(drupal_get_path('module', 'fbconnect_stream_publish') .'/fbconnect_stream_publish.js');
+			$feed = array(
+			  'type'    => 'comment',
+			  'comment' => 'comment real',
+			  'title'   => 'title',
+			  'nodeurl' => 'http://dtest2.imbusa.com/Steve_Jobs', //url('node/' . $node->nid, array('absolute' => TRUE)),
+			);
+    		fbconnect_stream_publish_render_js($feed);
+			break;
+*/			
+			
 	}
 }
 
@@ -381,13 +394,14 @@ function three_beats_menu() {
     'type' => MENU_NORMAL_ITEM,
 	);
 
+/*RK 7/29
 	$items['facebook_posting/%']=array(
     'page callback' => 'facebook_posting',
     'page arguments' => array(1),
     'access callback' => TRUE,
     'type' => MENU_CALLBACK,
 	);
-
+*/
 
 	$items['get_search_result']=array(
     'title'=>t('Get search results'),
@@ -527,22 +541,50 @@ function three_beats_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
 	global $user;
 	switch ($op) {
 		case 'view':
-
-			if ($node->field_wiki_pic[0]['url']){
-
+			if ($node->field_wiki_pic[0]['url'])
+			{
 				$node->field_celeb_picture[0]['filepath']=$node->field_wiki_pic[0]['url'];
-
 			}
 			break;
 
 		case 'insert' :
-		case 'update' :
+/**
+ * Added by Ryan Kern
+ *
+			if ($node->type=='vote')
+			{
+				global $user;
+				// FB.ui({ method: 'feed', message: '3beats really rocks!'});
 
+FB.ui(
+   {
+     method: 'feed',
+     name: 'Facebook Dialogs',
+     link: 'http://developers.facebook.com/docs/reference/dialogs/',
+     picture: 'http://fbrell.com/f8.jpg',
+     caption: 'Reference Documentation',
+     description: 'Dialogs provide a simple, consistent interface for applications to interface with users.'
+   },
+   function(response) {
+     if (response && response.post_id) {
+       alert('Post was published.');
+     } else {
+       alert('Post was not published.');
+     }
+   }
+ );
+
+ 
+			
+			}
+*/
+		case 'update' :
 			if($node->type=='vote')
 			{
 				global $user;
 				$account_profile = content_profile_load('personal',$user->uid);
 				// if user have facebook_post flag post vote to facebook
+/*RK 7/29
 				if($account_profile->field_facebook_posting[0]['value']){
 					fb_stream_publish_dialog(array(	  	'user_message'=>$node->field_vote_comment[0]['value'],
 													'attachment',
@@ -553,7 +595,8 @@ function three_beats_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
 													'actor_id'));
 
 				}
-			}
+*/
+				}
 			break;
 
 	}
@@ -784,7 +827,7 @@ function _beats_get_rating_chart($data, $url = NULL, $chart_size = '442x229', $n
     '#type' => CHART_TYPE_LINE,
     '#size' => chart_size($size[0], $size[1]),
     '#chart_fill' => chart_fill('bg', '000000'),
-    '#grid_lines' => chart_grid_lines(10, 10, 1, 1), // this should be dynamic
+    '#grid_lines' => chart_grid_lines(10, 10, 1, 1),
     '#adjust_resolution' => TRUE,
 
 	);
@@ -952,7 +995,7 @@ function validate_article($uid, $articleURL, $cid){
 }
 
 /**
- * Get count of celebrities bu vote id
+ * Get count of celebrities by vote id
  * @param $voteId
  * /home
  */
@@ -1055,9 +1098,53 @@ function three_beats_menu_alter(&$items) {
 }
 
 function three_beats_site_add_celebrity($node = NULL, $term = NULL){
-        module_load_include('pages.inc', 'node');
+    module_load_include('pages.inc', 'node');
+    if (isset($_POST['op']) && $_POST['op']=="Save") {
+    	$body =	"	<br />
+    				First Name: " . $_POST['field_firstname'][0]['value'] . "<br />
+					Last Name: " . $_POST['field_lastname'][0]['value'] . "<br />
+					Description: " . $_POST['field_description'][0]['value'] . "<br />
+					From User: " . $_POST['name'] . "<br />
+				<br /> 
+    	";
+		SendEmail("contact@3beats.com", "contact@3beats.com", "contact@3beats.com", "New Celebrity Request", $body);
+		unset($_POST); 
+		$_POST["emailsent"] = "yes";
+    }
 	return node_add('celebrity');
 }
+
+
+function SendEmail($from, $to, $replyto, $subject, $body)
+{
+
+
+$email_from = $from; // Who the email is from 
+$email_subject = $subject; // The Subject of the email 
+$email_message = $body;
+
+
+$email_to = $to; // Who the email is to 
+
+$headers = "From: ".$email_from ."\r\nReply-To: " . $replyto;
+
+$semi_rand = md5(time()); 
+$mime_boundary = "==Multipart_Boundary_x{$semi_rand}x"; 
+
+$headers .= "\nMIME-Version: 1.0\n" . 
+"Content-Type: multipart/mixed;\n" . 
+" boundary=\"{$mime_boundary}\""; 
+
+$email_message .= "This is a multi-part message in MIME format.\n\n" . 
+"--{$mime_boundary}\n" . 
+"Content-Type:text/html; charset=\"iso-8859-1\"\n" . 
+"Content-Transfer-Encoding: 7bit\n\n" . 
+$email_message .= "\n\n"; 
+
+
+return mail($email_to, $email_subject, $email_message, $headers); 
+} 
+
 
 function three_beats_get_image($path, $image_path = NULL, $category = NULL, $node = array()){
 	$image = '';
@@ -1288,6 +1375,7 @@ function three_beats_token_list($type = 'all') {
  *
  * Currently supporting only connect pages, not canvas pages.
  */
+/*RK 7/29
 
 function three_beats_fb_user($op, $data, &$return) {
 	global $user;
@@ -1340,6 +1428,7 @@ function three_beats_fb_user($op, $data, &$return) {
 		}
 	}
 }
+*/
 
 function three_beats_site_word_wrap_wbr($text, $length){
 	/*
@@ -1471,9 +1560,10 @@ function three_beats_substr_name($fistname, $lastname, $size){
 /**
  * activete or deactivate twitter posting
  */
-function facebook_posting($facebook_postiong_value){
-	var_dump($facebook_postiong_value);
-	if ($facebook_postiong_value=="on")
+/*RK 7/29
+function facebook_posting($facebook_posting_value){
+	var_dump($facebook_posting_value);
+	if ($facebook_posting_value=="on")
 	{
 		global $user;
 		$account_profile = content_profile_load('personal',$user->uid);
@@ -1482,7 +1572,7 @@ function facebook_posting($facebook_postiong_value){
 		echo json_encode(array("facebook posting on"));
 
 	}
-	elseif($facebook_postiong_value=="off")
+	elseif($facebook_posting_value=="off")
 	{
 		global $user;
 		$account_profile = content_profile_load('personal',$user->uid);
@@ -1491,7 +1581,7 @@ function facebook_posting($facebook_postiong_value){
 		echo json_encode(array("facebook posting off"));
 	}
 }
-
+*/
 function three_beats_user($op, &$edit, &$account, $category = NULL) {
 	if ($op == 'logout') {
 		setcookie('myCookie1', '', time()-3600, '/');
