@@ -660,7 +660,7 @@ function _beats_get_rating_data($node, $period = '4m') {
 
 		case '1d':
 			$descr = 'hour';
-			$descr_count = 48;
+			$descr_count = 24;
 			$sdate = 60 * 60 * 24 * 1;
 			$node_created_format = '%Y-%m-%d %h';
 			break;
