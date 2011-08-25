@@ -45,37 +45,44 @@ function fbconnect_stream_publish_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
    * Ryan Kern
    * 5 Aug 2011
    * Attempting to post on FB wall
-   *
-	if ($op == 'insert')
+	
+	$node->teaser = ""
+	$node->comment = 0
+	$node->field_vote_comment[0][value] = THIS IS THE COMMENT
+	$node->field_vote_rate[0][rating] = null, 25, 75, 100
+	$node->field_firstname[0][value] = NOTHING
+   */
+  if ($op == 'insert')
 	{
-		if ($node->type=='vote')
+			if ($node->type=='vote')
 		{
-			watchdog('fbconnect_stream_publish', 'fbconnect_stream_publish_nodeapi');
-			$feed = array(
-			  'type'    => 'node',
-			  'comment' => 'comment is sweet', // $node->body,
-			  'title'   => 'title is better', // $node->title,
-			  'nodeurl' => 'http://dtest2.imbusa.com/Steve_Jobs', //url('node/' . $node->nid, array('absolute' => TRUE)),
-			);
+			$new_title = preg_replace("/(\w)+\s-\s([a-zA-Z\s'-]+)(-\s\s-\s)([a-zA-Z\s'-]+)(\s-\s)(\d{4}\/\d{1,2}\/\d{1,2})\s-\s\+(\d)/",
+							'\4',
+							$node->title);
+			
+			$new_vote  = preg_replace("/(\w)+\s-\s([a-zA-Z\s'-]+)(-\s\s-\s)([a-zA-Z\s'-]+)(\s-\s)(\d{4}\/\d{1,2}\/\d{1,2})\s-\s\+(\d)/",
+							'\7',
+							$node->title);
 
-			fbconnect_stream_publish_render_js($feed);
+			$_SESSION['fbconnect_feed'] = array(
+			  'type'    => 'node',
+			  'title'   => 'This comment is about ' . $new_title,
+			  'nodeurl' => url('node/' . $node->nid, array('absolute' => TRUE)),
+			);
 		}
 	}
-	*/
 }
 
 /**
- * Impletementation of hook_form_alter().
+ * Implementation of hook_form_alter().
  */
 function fbconnect_stream_publish_form_alter(&$form, &$form_state, $form_id) {
   // Facebook feed checkbox on node edit/create form.
   // only show this on the create new forms, not the edit forms
-
-  /* Ryan Kern */ watchdog('fbconnect_stream_publish_form_alter', 'fb_publish_form_alter: formid=|' . $form_id . '|$fm[nodetype]=|' . $form['#node']->type . '|[nid][val]=|' . $form['nid']['#value']);
   
   if (isset($form['#node']) && $form['#node']->type . '_node_form' == $form_id && $form['nid']['#value'] == NULL) {
     // only with allowed content types
-  /* Ryan Kern */ watchdog('fbconnect_stream_publish_form_alter', 'In IF');
+/* Ryan Kern  watchdog('fbconnect_stream_publish_form_alter', 'In IF');*/
 
     $publishing_mode = variable_get('fbconnect_stream_publish_onoff_' . $form['#node']->type, FBCONNECT_STREAM_PUBLISH_NONE);
     if (!in_array($publishing_mode, array(FBCONNECT_STREAM_PUBLISH_ALL, FBCONNECT_STREAM_PUBLISH_NODES))) {
@@ -104,13 +111,9 @@ function fbconnect_stream_publish_form_alter(&$form, &$form_state, $form_id) {
  */
 function fbconnect_stream_publish_form_comment_form_alter(&$form, &$form_state) {
 
-  /* Ryan Kern */ watchdog('fbconnect_stream_publish_form_comment_form_alter', 'Itin fbconnect_stream_publish_form_comment_form_alter');
-
-
   // Facebook feed checkbox on comment form.
   if ($node = node_load($form['nid']['#value'])) {
     // add only for allowed content types
-  /* Ryan Kern */ watchdog('fbconnect_stream_publish_form_comment_form_alter', 'In IF 2');
     $publishing_mode = variable_get('fbconnect_stream_publish_onoff_' . $node->type, FBCONNECT_STREAM_PUBLISH_NONE);
     if (in_array($publishing_mode, array(FBCONNECT_STREAM_PUBLISH_ALL, FBCONNECT_STREAM_PUBLISH_COMMENTS))) {
 
@@ -130,8 +133,6 @@ function fbconnect_stream_publish_form_comment_form_alter(&$form, &$form_state) 
       );
       
       if (module_exists('ajax_comments')) {
-  /* Ryan Kern */
-	watchdog('fbconnect_stream_publish_form_comment_form_alter', 'Itin ajax_comments');
         $form['submit']['#submit'][] = 'fbconnect_stream_publish_comment_feed_submit';
         drupal_add_js(drupal_get_path('module', 'fbconnect_stream_publish') .'/fbconnect_stream_publish.js');
       }
@@ -195,9 +196,6 @@ function fbconnect_stream_publish_comment_feed_submit($form, &$form_state) {
       'nodeurl' => url('node/' . $node->nid, array('absolute' => TRUE)),
     );
 
-  /* Ryan Kern */
-  watchdog('fbconnect_stream_publish_comment_feed_submit', 'Initializing fbconnect_stream_publish_comment_feed_submit:');
-    
     if (module_exists('ajax_comments')) {
       fbconnect_stream_publish_render_js($feed);
     }
@@ -278,93 +276,7 @@ function fbconnect_stream_publish_render_js($feed) {
 //  drupal_alter('fbconnect_stream_publish', $streamPublishArgs);
   drupal_add_js(array('FB.streamPublish' => $streamPublishArgs), 'setting');
 
-  /* Ryan Kern */
-  // watchdog('fbconnect_stream_publish_render_js', 'Path: ' . drupal_get_path('module', 'fbconnect_stream_publish'));
-  // 'sites/all/modules/custom/three_beats'
-
   drupal_add_js(drupal_get_path('module', 'fbconnect_stream_publish') .'/fbconnect_stream_publish.js');
-  // drupal_add_js('sites/all/modules/fbconnect/fbconnect_stream_publish/fbconnect_stream_publish.js');
-	
-/*	
-  drupal_add_js("$(document).ready(function(){
-	FB.ui(
-	   {
-		 method: 'feed',
-		 name: '3beats: Comment on Simon Cowell',
-		 message: 'Simon is the shiznit!',
-		 link: 'http://www.3beats.com/Simon_Cowell/',
-		 picture: 'http://fbrell.com/f8.jpg',
-		 caption: 'Yet another opinion on Simon',
-		 description: 'A couple articles of the day on Simon: fbconnect_stream_publish'
-	   },
-	   function(response) {
-		 if (response && response.post_id) {
-		   alert('Bro, Post was published.');
-		 } else {
-		   alert('Bro, Post was not published.');
-		 }
-	   }
-	   });
-	   
-	   jQuery(document).trigger('fb:ui');
-	   
-	   ", "inline");
-	
-
-
-    $('ul.${class}_menu > li').bind('mouseenter',function(){
-      $('ul.${class}').hide();
-    });
-
-    $('li#${class}_menu').bind('mouseenter',function(){
-      $('ul.${class}').show();
-    });
-
-    $('li#${class}_menu').bind('mouseleave',function(){
-      $('ul.${class}').hide();
-    });
-  });", "inline");*/
-  /* Ryan Kern   
-    $footer['fb-ui-code'] = <<<CODE
-      
-      <script type="text/javascript">
-        window.fbAsyncInit = function() {
-          FB.ui(
-		   {
-			 method: 'feed',
-			 name: '3beats: Comment on Simon Cowell',
-			 message: 'Simon is the shiznit!',
-			 link: 'http://www.3beats.com/Simon_Cowell/',
-			 picture: 'http://fbrell.com/f8.jpg',
-			 caption: 'Yet another opinion on Simon',
-			 description: 'A couple articles of the day on Simon: '
-		   },
-		   function(response) {
-			 if (response && response.post_id) {
-			   alert('Bro, Post was published.');
-			 } else {
-			   alert('Bro, Post was not published.');
-			 }
-		   }
-		 ); 
-		  jQuery(document).trigger('fb:init');
-        };
-      
-        (function() {
-          var e = document.createElement('script');
-          e.src = $config[connect_js];
-          e.async = true;
-          document.getElementById('fb-root').appendChild(e);
-        }());
-      </script>
-CODE;
-*/
-  
-
-  
-  
-  
-  watchdog('fbconnect_stream_publish_render_js', 'Finished render_js');
 
 }
 

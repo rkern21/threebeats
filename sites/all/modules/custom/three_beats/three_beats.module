@@ -118,7 +118,6 @@ function three_beats_init() {
  * @see http://api.drupal.org/hook_form_alter
  */
 function three_beats_form_alter(&$form, &$form_state, $form_id) {
-	/* Ryan Kern */ watchdog('three_beats_form_alter', 'three_beats_form_alter: ' . $form_id);
 	global $user;
 	switch ($form_id){
 		case 'celeb_import_node_form':
