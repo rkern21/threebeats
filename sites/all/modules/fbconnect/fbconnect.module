@@ -428,7 +428,11 @@ function fbconnect_footer() {
             xfbml  : true,
             logging: '$config[debug]'
           });
-         
+
+
+
+
+		  
           jQuery(document).trigger('fb:init');
         };
 
@@ -786,13 +790,85 @@ function fbconnect_theme_user_picture_override($account) {
   if ($fbuid && $account->fb_avatar) {
     $output = theme('fbconnect_user_picture_override', $fbuid, $account, $user_url, variable_get('fbconnect_pic_size', $preset), variable_get('fbconnect_pic_logo', TRUE));
   } 
-  else {  
+  else {
     $output = theme('fbconnect_user_picture_orig', $account); // Markup without fb_connect.
   }
+ //ktotoconcept: Doing something with imagecache
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, 'http://graph.facebook.com/' . $fbuid . '/picture?type=large');
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10); //ktotoconcept: 
+    $file = curl_redir_exec($ch);
+    curl_close($ch);
+
+    $ch2 = curl_init($file[1]);
+    $fp = fopen('sites/default/files/images/temp/'.$file[2], 'wb');
+    curl_setopt($ch2, CURLOPT_FILE, $fp);
+    curl_setopt($ch2, CURLOPT_HEADER, 0);
+    curl_exec($ch2);
+    curl_close($ch2);
+    fclose($fp);
+
+    $presetname = 'user_cached_images_large';
+    $presetname2 = 'user_cached_images_small';
+    imagecache_generate($presetname, 'sites/default/files/images/temp/'.$file[2], $account->uid . '.jpg');
+    imagecache_generate($presetname2, 'sites/default/files/images/temp/'.$file[2], $account->uid . '.jpg');
+    //$output = theme('imagecache', $presetname, $account->uid . '.jpg', 'user avatar');
 
   return $output;
 
 }
+
+
+function imagecache_generate($presetname, $src, $filepath)
+{
+    if (!$preset = imagecache_preset_by_name($presetname)) {
+        return;
+    }
+
+    $dst = imagecache_create_path($presetname, $filepath);
+
+    if (!file_exists($dst)) {
+        imagecache_build_derivative($preset['actions'], $src, $dst);
+    }
+    else{
+        imagecache_image_flush($filepath);
+        imagecache_build_derivative($preset['actions'], $src, $dst);
+    }
+
+    return $dst;
+}
+
+
+function curl_redir_exec($ch)
+{
+    curl_setopt($ch, CURLOPT_HEADER, true);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    $data = curl_exec($ch);
+    list($header, $data) = explode("\n\n", $data, 2);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $arr = array();
+    if ($http_code == 301 || $http_code == 302) {
+        $matches = array();
+        preg_match('/Location:(.*?)\n/', $header, $matches);
+        $url = @parse_url(trim(array_pop($matches)));
+
+        $last_url = parse_url(curl_getinfo($ch, CURLINFO_EFFECTIVE_URL));
+
+        if (!$url['scheme'])
+            $url['scheme'] = $last_url['scheme'];
+        if (!$url['host'])
+            $url['host'] = $last_url['host'];
+        if (!$url['path'])
+            $url['path'] = $last_url['path'];
+        $arr[1] = $url['scheme'] . '://' . $url['host'] . $url['path'] . ($url['query'] ? '?' . $url['query'] : '');
+        $arr[2] = substr($url['path'], 18);
+    }
+    return $arr;
+}
+
+
+
+
 
 /**
  * Implements hook_profile_alter().
