@@ -1,0 +1,1 @@
+<li><?php echo l($fields['title']->content, $fields['field_url_url']->content, array('attributes' => array('target' => '_blank'))); ?></li>
