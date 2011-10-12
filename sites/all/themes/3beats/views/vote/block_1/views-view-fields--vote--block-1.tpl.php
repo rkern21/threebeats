@@ -87,7 +87,7 @@ else {
 		$CelebImageUrl = $CelebImageCachedUrl;
 		print "<img src='".$twitterCelebImageUrl."' title='".$fields['field_twitter_author_value']->content."' class='celeb_cat_stream_img' />";
 	}else {
-		print l(theme('imagecache', '48x48', $fields['picture']->raw, '', $fields['field_first_name_value']->content.' '.$fields['field_last_name_value']->content, array('class'=>'celeb_cat_stream_img')), 'user/' . $fields['uid']->raw, array('html' => TRUE));
+		print l(theme('imagecache', 'user_cached_images_small', $fields['uid']->raw . '.jpg', '', $fields['field_first_name_value']->content.' '.$fields['field_last_name_value']->content, array('class'=>'celeb_cat_stream_img')), 'user/' . $fields['uid']->raw, array('html' => TRUE));
 	}
 ?>
 		<div id="celeb_stream_text">

@@ -97,7 +97,7 @@ function three_beats_rest_get_json() {
   if ($getVar) {
     unset($getVar['q']);
     if (count($getVar) == 2 && is_numeric($fuid) && $source == 'fb') {
-      $uid = db_result(db_query("SELECT uid from {fb_user} WHERE fbu= %d", $fuid));
+      $uid = db_result(db_query("SELECT uid from {fbconnect_users} WHERE fbuid= %d", $fuid));
       if ($uid) {
         $account = user_load($uid);
         print_json_result(array('existing' => 1));
@@ -139,7 +139,7 @@ function three_beats_rest_get_json() {
   }
   $celebrity_node = node_load($result_article->node_node_data_field_celebrity_nid ? $result_article->node_node_data_field_celebrity_nid : $celebrity_nid[0]->nid);
 
-  $uid = db_result(db_query("SELECT uid from {fb_user} WHERE fbu= %d", $fuid));
+  $uid = db_result(db_query("SELECT uid from {fbconnect_users} WHERE fbuid= %d", $fuid));
   if ($uid) {
     $account = user_load($uid);
     $isExistingUser = 1;
@@ -235,9 +235,9 @@ function three_beats_rest_get_json() {
             'last_comment' => $lastComment,
             'username' => $account->name,
             'cid' => $celebrity_node->nid,
-            'celebURL' => str_replace( 'api . ', '', url('node/'  .  $celebrity_node->nid, array('absolute' => TRUE))),
+            'celebURL' => str_replace( 'api.', 'www.', url('node/'  .  $celebrity_node->nid, array('absolute' => TRUE))),
             'celebpic' => url($CelebImageUrl, array('absolute' => TRUE)),
-            'celebrity_chart' => url(_beats_get_rating_chart(_beats_get_rating_data($celebrity_node, $period = '1d'), TRUE, $chart_size), array('absolute' => TRUE)),
+            'celebrity_chart' => url(_beats_get_rating_chart(_beats_get_rating_data($celebrity_node, $period = '1d'), TRUE, $chart_size, $celebrity_node->nid), array('absolute' => TRUE)),
             'friends' => $voters_voted,
   );
 
@@ -325,7 +325,11 @@ function three_beats_rest_post_json() {
   $name = $_POST['name'] ? $_POST['name'] : $_GET['name'];
   $email = $_POST['email'] ? $_POST['email'] : $_GET['email'];
 
-  $uid = db_result(db_query("SELECT uid from {fb_user} WHERE fbu= %d", $fuid));
+  // RK
+  // $uid = db_result(db_query("SELECT uid from {fbconnect_users} WHERE fbuid= %d", $fuid));
+  $uid = $fuid;
+  // end RK
+  
   if ($uid) {
     $user = user_load($uid);
   }
@@ -522,13 +526,13 @@ function three_beats_rest_get_all_celebrities() {
 function three_beats_rest_fb_user($op, $data, $return) {
   if ($op == 'post_user') {
     $fb = $data['fb'];
-    $fbu = $fb->getUser();
+    $fbuid = $fb->getUser();
 
-    db_query('INSERT INTO {fb_user_ext} (uid, fbu, hostname, timestamp) VALUES (%d, "%s", "%s", %d)', $data['account']->uid, $fbu, ip_address(), $data['account']->created);
+    // RK: db_query('INSERT INTO {fb_user_ext} (uid, fbuid, hostname, timestamp) VALUES (%d, "%s", "%s", %d)', $data['account']->uid, $fbuid, ip_address(), $data['account']->created);
 
-    //$params['query'] = "SELECT pid FROM photo WHERE aid IN ( SELECT aid FROM album WHERE owner='" . $fbu . "') ORDER BY created DESC LIMIT 1,42";
+    //$params['query'] = "SELECT pid FROM photo WHERE aid IN ( SELECT aid FROM album WHERE owner='" . $fbuid . "') ORDER BY created DESC LIMIT 1,42";
     //$params['method'] = 'fql . query';
-    //$params['access_token'] = fb_get_token($fbu);
+    //$params['access_token'] = fb_get_token($fbuid);
     //$result = $GLOBALS['_fb']->api($params);
 
 
@@ -545,19 +549,19 @@ function three_beats_rest_fb_user($op, $data, $return) {
 function three_beats_rest_user($op, &$edit, &$account, $category = NULL) {
   if ($op == 'update' && $category == 'fb_user') {
     if ($edit['map']) {
-      // Delete any pre-existing mapping that might exist for this local uid or fbu .
-      db_query("DELETE FROM {fb_user_ext} WHERE uid=%d OR fbu=%d", $account->uid, $edit['map']);
+      // Delete any pre-existing mapping that might exist for this local uid or fbuid .
+      // RK: db_query("DELETE FROM {fb_user_ext} WHERE uid=%d OR fbuid=%d", $account->uid, $edit['map']);
 
       // Create the new mapping .
-      db_query('INSERT INTO {fb_user_ext} (uid, fbu, hostname, timestamp) VALUES (%d, "%s", "%s", %d)', $account->uid, $edit['map'], ip_address(), time());
+      // RK: db_query('INSERT INTO {fb_user_ext} (uid, fbuid, hostname, timestamp) VALUES (%d, "%s", "%s", %d)', $account->uid, $edit['map'], ip_address(), time());
     }
     else {
       // Delete account mapping, because administrator has unchecked the connect option .
-      db_query('DELETE FROM {fb_user_ext} WHERE uid=%d', $account->uid);
+      // RK: db_query('DELETE FROM {fb_user_ext} WHERE uid=%d', $account->uid);
     }
   }
   elseif ($op == 'delete') {
-    db_query('DELETE FROM {fb_user_ext} WHERE uid=%d', $account->uid);
+    // RK: db_query('DELETE FROM {fb_user_ext} WHERE uid=%d', $account->uid);
   }
 }
 
